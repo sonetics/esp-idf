@@ -126,6 +126,9 @@ typedef struct {
                            */
 } spi_bus_config_t;
 
+
+struct spi_host_t;
+
 /**
  * @brief Initialize a SPI bus
  *
@@ -166,6 +169,42 @@ esp_err_t spi_bus_initialize(spi_host_device_t host_id, const spi_bus_config_t *
  *         - ESP_OK                on success
  */
 esp_err_t spi_bus_free(spi_host_device_t host_id);
+
+/**
+ * @brief Helper function for malloc DMA capable memory for SPI driver
+ *
+ * @note This API will take care of the cache and hardware alignment internally.
+ *       To free/release memory allocated by this helper function, simply calling `free()`
+ *
+ * @param[in]  host_id          SPI peripheral who will using the memory
+ * @param[in]  size             Size in bytes, the amount of memory to allocate
+ * @param[in]  extra_heap_caps  Extra heap caps based on MALLOC_CAP_DMA
+ *
+ * @return                      Pointer to the memory if allocated successfully
+ */
+void *spi_bus_dma_memory_alloc(spi_host_device_t host_id, size_t size, uint32_t extra_heap_caps);
+
+ * @brief Disable a SPI bus (can be enabled again later)
+ *
+ * @param host_id SPI peripheral to free
+ * @return
+ *         - ESP_ERR_INVALID_ARG   if parameter is invalid
+ *         - ESP_ERR_INVALID_STATE if bus hasn't been initialized before, or not all devices on the bus are freed
+ *         - ESP_OK                on success
+ */
+esp_err_t spi_bus_disable(spi_host_device_t host_id);
+
+/**
+ * @brief Enable a SPI bus (after it was disabled)
+ *
+ * @param host_id SPI peripheral to free
+ * @return
+ *         - ESP_ERR_INVALID_ARG   if parameter is invalid
+ *         - ESP_ERR_INVALID_STATE if bus hasn't been initialized before, or not all devices on the bus are freed
+ *         - ESP_OK                on successs
+ */
+esp_err_t spi_bus_enable(spi_host_device_t host_id);
+
 
 #ifdef __cplusplus
 }
