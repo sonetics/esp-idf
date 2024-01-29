@@ -565,7 +565,8 @@ esp_err_t spi_bus_enable_device(spi_device_handle_t handle)
 {
     esp_err_t err = ESP_OK;
     const spi_bus_attr_t *bus_attr = handle->host->bus_attr;
-
+    spi_device_interface_config_t *dev_config = &handle->cfg;
+    
     int use_gpio = !(bus_attr->flags & SPICOMMON_BUSFLAG_IOMUX_PINS);
     // spicommon_cs_initialize(host_id, dev_config->spics_io_num, freecs, use_gpio);
     
@@ -604,6 +605,61 @@ esp_err_t spi_bus_enable_device(spi_device_handle_t handle)
             err = esp_intr_alloc(spicommon_irqsource_for_host(host_id), bus_attr->bus_cfg.intr_flags | ESP_INTR_FLAG_INTRDISABLED, spi_intr, host, &host->intr);
         }
     }
+
+#if SOC_SPI_SUPPORT_CLK_RC_FAST
+    if (dev_config->clock_source == SPI_CLK_SRC_RC_FAST) {
+        SPI_CHECK(periph_rtc_dig_clk8m_enable(), "the selected clock not available", ESP_ERR_INVALID_STATE);
+    }
+#endif
+    spi_clock_source_t clk_src = SPI_CLK_SRC_DEFAULT;
+    uint32_t clock_source_hz = 0;
+    if (dev_config->clock_source) {
+        clk_src = dev_config->clock_source;
+    }
+    esp_clk_tree_src_get_freq_hz(clk_src, ESP_CLK_TREE_SRC_FREQ_PRECISION_APPROX, &clock_source_hz);
+    SPI_CHECK((dev_config->clock_speed_hz > 0) && (dev_config->clock_speed_hz <= clock_source_hz), "invalid sclk speed", ESP_ERR_INVALID_ARG);
+#ifdef CONFIG_IDF_TARGET_ESP32
+    //The hardware looks like it would support this, but actually setting cs_ena_pretrans when transferring in full
+    //duplex mode does absolutely nothing on the ESP32.
+    SPI_CHECK(dev_config->cs_ena_pretrans <= 1 || (dev_config->address_bits == 0 && dev_config->command_bits == 0) ||
+        (dev_config->flags & SPI_DEVICE_HALFDUPLEX), "In full-duplex mode, only support cs pretrans delay = 1 and without address_bits and command_bits", ESP_ERR_INVALID_ARG);
+#endif
+
+    //assign the SPI, RX DMA and TX DMA peripheral registers beginning address
+    spi_hal_config_t hal_config = {
+        //On ESP32-S2 and earlier chips, DMA registers are part of SPI registers. Pass the registers of SPI peripheral to control it.
+        .dma_in = SPI_LL_GET_HW(host_id),
+        .dma_out = SPI_LL_GET_HW(host_id),
+        .dma_enabled = bus_attr->dma_enabled,
+        .dmadesc_tx = bus_attr->dmadesc_tx,
+        .dmadesc_rx = bus_attr->dmadesc_rx,
+        .tx_dma_chan = bus_attr->tx_dma_chan,
+        .rx_dma_chan = bus_attr->rx_dma_chan,
+        .dmadesc_n = bus_attr->dma_desc_num,
+    };
+    spi_hal_init(&handle->host->hal, host_id, &hal_config);
+        
+    //input parameters to calculate timing configuration
+    int half_duplex = dev_config->flags & SPI_DEVICE_HALFDUPLEX ? 1 : 0;
+    int no_compensate = dev_config->flags & SPI_DEVICE_NO_DUMMY ? 1 : 0;
+    int duty_cycle = (dev_config->duty_cycle_pos == 0) ? 128 : dev_config->duty_cycle_pos;
+    spi_hal_timing_param_t timing_param = {
+        .half_duplex = half_duplex,
+        .no_compensate = no_compensate,
+        .clk_src_hz = clock_source_hz,
+        .expected_freq = dev_config->clock_speed_hz,
+        .duty_cycle = duty_cycle,
+        .input_delay_ns = dev_config->input_delay_ns,
+        .use_gpio = use_gpio
+    };
+
+    //output values of timing configuration
+    spi_hal_timing_conf_t temp_timing_conf;
+    int freq;
+    esp_err_t ret = spi_hal_cal_clock_conf(&timing_param, &freq, &temp_timing_conf);
+    temp_timing_conf.clock_source = clk_src;
+    SPI_CHECK(ret == ESP_OK, "assigned clock speed not supported", ret);
+
 
     // assert(handle->host->device[handle->id] == handle);
     // handle->host->device[handle->id] = NULL;
