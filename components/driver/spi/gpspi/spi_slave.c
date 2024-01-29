@@ -306,7 +306,7 @@ esp_err_t spi_slave_free(spi_host_device_t host)
     spicommon_bus_free_io_cfg(&spihost[host]->bus_config);
     free(spihost[host]->hal.dmadesc_tx);
     free(spihost[host]->hal.dmadesc_rx);
-    esp_intr_free(spihost[host]->intr);
+    assert(esp_intr_free(spihost[host]->intr) == ESP_OK);
 #ifdef CONFIG_PM_ENABLE
     esp_pm_lock_release(spihost[host]->pm_lock);
     esp_pm_lock_delete(spihost[host]->pm_lock);
@@ -315,6 +315,103 @@ esp_err_t spi_slave_free(spi_host_device_t host)
     spihost[host] = NULL;
     spicommon_periph_free(host);
     return ESP_OK;
+}
+
+/// Copied from spi_slave_free() and modified to not free the spihost[host] pointer
+esp_err_t spi_slave_disable(spi_host_device_t host)
+{
+    SPI_CHECK(is_valid_host(host), "invalid host", ESP_ERR_INVALID_ARG);
+    SPI_CHECK(spihost[host], "host not slave", ESP_ERR_INVALID_ARG);
+    // if (spihost[host]->trans_queue) vQueueDelete(spihost[host]->trans_queue);
+    // if (spihost[host]->ret_queue) vQueueDelete(spihost[host]->ret_queue);
+    // if (spihost[host]->dma_enabled) {
+    //     spicommon_dma_chan_free(host);
+    // }
+    // free(spihost[host]->hal.dmadesc_tx);
+    // free(spihost[host]->hal.dmadesc_rx);
+    assert(esp_intr_free(spihost[host]->intr) == ESP_OK);
+#ifdef CONFIG_PM_ENABLE
+    esp_pm_lock_release(spihost[host]->pm_lock);
+    // esp_pm_lock_delete(spihost[host]->pm_lock);
+#endif //CONFIG_PM_ENABLE
+
+    // assert(spicommon_periph_free(host) == ESP_OK);
+
+    // spi_slave_free calls spi_common_periph_free, but this doesn't
+    // free the IO (which seems like a bug). spi_bus_disable does free.
+    spi_bus_disable(host);
+
+    return ESP_OK;
+}
+
+esp_err_t spi_slave_enable(spi_host_device_t host, const spi_bus_config_t *bus_config)
+{
+    /*
+    bool spi_chan_claimed;
+    esp_err_t ret = ESP_OK;
+    spi_chan_claimed=spicommon_periph_claim(host, "spi slave");
+    SPI_CHECK(spi_chan_claimed, "host already in use", ESP_ERR_INVALID_STATE);
+    return ret;
+    */
+   SPI_CHECK(is_valid_host(host), "invalid host", ESP_ERR_INVALID_ARG);
+
+    bool spi_chan_claimed;
+    esp_err_t ret = ESP_OK;
+    esp_err_t err;
+    SPI_CHECK(is_valid_host(host), "invalid host", ESP_ERR_INVALID_ARG);
+    spi_chan_claimed=spicommon_periph_claim(host, "spi slave");
+    SPI_CHECK(spi_chan_claimed, "host already in use", ESP_ERR_INVALID_STATE);
+
+    err = spicommon_bus_initialize_io(host, bus_config, SPICOMMON_BUSFLAG_SLAVE|bus_config->flags, &spihost[host]->flags);
+    if (err!=ESP_OK) {
+        ret = err;
+        goto enable_cleanup;
+    }
+    spi_slave_interface_config_t *slave_config = &spihost[host]->cfg;
+    if (slave_config->spics_io_num >= 0) {
+        spicommon_cs_initialize(host, slave_config->spics_io_num, 0, !bus_is_iomux(spihost[host]));
+        // check and save where cs line really route through
+        spihost[host]->cs_iomux = (slave_config->spics_io_num == spi_periph_signal[host].spics0_iomux_pin) && bus_is_iomux(spihost[host]);
+    }
+
+    // The slave DMA suffers from unexpected transactions. Forbid reading if DMA is enabled by disabling the CS line.
+    if (spihost[host]->dma_enabled) freeze_cs(spihost[host]);
+
+#ifdef CONFIG_PM_ENABLE
+    // Lock APB frequency while SPI slave driver is in use
+    err = esp_pm_lock_acquire(spihost[host]->pm_lock);
+    if (err != ESP_OK) {
+        ret = err;
+        goto enable_cleanup;
+    }
+#endif //CONFIG_PM_ENABLE
+
+
+    int flags = bus_config->intr_flags | ESP_INTR_FLAG_INTRDISABLED;
+    err = esp_intr_alloc(spicommon_irqsource_for_host(host), flags, spi_intr, (void *)spihost[host], &spihost[host]->intr);
+    if (err != ESP_OK) {
+        ret = err;
+        goto enable_cleanup;
+    }
+
+    // spi_slave_hal_context_t *hal = &spihost[host]->hal;
+    // spi_slave_hal_setup_device(hal);
+
+    return ESP_OK;
+
+enable_cleanup:
+#ifdef CONFIG_PM_ENABLE
+        if (spihost[host]->pm_lock) {
+            esp_pm_lock_release(spihost[host]->pm_lock);
+            esp_pm_lock_delete(spihost[host]->pm_lock);
+        }
+#endif
+    spi_slave_hal_deinit(&spihost[host]->hal);
+    spicommon_periph_free(host);
+
+    return ret;
+
+    
 }
 
 /**
@@ -452,7 +549,10 @@ static void SPI_SLAVE_ISR_ATTR spi_intr(void *arg)
     spi_slave_t *host = (spi_slave_t *)arg;
     spi_slave_hal_context_t *hal = &host->hal;
 
-    assert(spi_slave_hal_usr_is_done(hal));
+    // assert(spi_slave_hal_usr_is_done(hal));
+    if (!spi_slave_hal_usr_is_done(hal)) {
+        return;
+    }
 
     bool use_dma = host->dma_enabled;
     if (host->cur_trans) {

@@ -530,6 +530,89 @@ esp_err_t spi_device_get_actual_freq(spi_device_handle_t handle, int* freq_khz)
     return ESP_OK;
 }
 
+esp_err_t spi_bus_disable_device(spi_device_handle_t handle)
+{
+    SPI_CHECK(handle!=NULL, "invalid handle", ESP_ERR_INVALID_ARG);
+    //These checks aren't exhaustive; another thread could sneak in a transaction inbetween. These are only here to
+    //catch design errors and aren't meant to be triggered during normal operation.
+    SPI_CHECK(uxQueueMessagesWaiting(handle->trans_queue)==0, "Have unfinished transactions", ESP_ERR_INVALID_STATE);
+    SPI_CHECK(handle->host->cur_cs == DEV_NUM_MAX || handle->host->device[handle->host->cur_cs] != handle, "Have unfinished transactions", ESP_ERR_INVALID_STATE);
+    SPI_CHECK(uxQueueMessagesWaiting(handle->ret_queue)==0, "Have unfinished transactions", ESP_ERR_INVALID_STATE);
+
+    //return
+    int spics_io_num = handle->cfg.spics_io_num;
+    
+    if (spics_io_num >= 0) spicommon_cs_free_io(spics_io_num);
+
+    // free interrupt
+    if (handle->host->intr) {
+        esp_intr_free(handle->host->intr);
+    }
+
+    //Kill queues
+    // vQueueDelete(handle->trans_queue);
+    // vQueueDelete(handle->ret_queue);
+    // spi_bus_lock_unregister_dev(handle->dev_lock);
+
+    // assert(handle->host->device[handle->id] == handle);
+    // handle->host->device[handle->id] = NULL;
+    // free(handle);
+    return ESP_OK;
+
+}
+
+esp_err_t spi_bus_enable_device(spi_device_handle_t handle)
+{
+    esp_err_t err = ESP_OK;
+    const spi_bus_attr_t *bus_attr = handle->host->bus_attr;
+
+    int use_gpio = !(bus_attr->flags & SPICOMMON_BUSFLAG_IOMUX_PINS);
+    // spicommon_cs_initialize(host_id, dev_config->spics_io_num, freecs, use_gpio);
+    
+    SPI_CHECK(handle!=NULL, "invalid handle", ESP_ERR_INVALID_ARG);
+    //return
+
+    spi_host_t *host = handle->host;
+    spi_host_device_t host_id = host->id;
+    
+    int spics_io_num = handle->cfg.spics_io_num;
+    int freecs = handle->id;
+    if (spics_io_num >= 0) spicommon_cs_initialize(host_id, spics_io_num, freecs, use_gpio);
+
+    //Kill queues
+    // vQueueDelete(handle->trans_queue);
+    // vQueueDelete(handle->ret_queue);
+    // spi_bus_lock_unregister_dev(handle->dev_lock);
+    
+    // MDB tried this first, but seemed transaction never finished
+    // err = esp_intr_alloc(spicommon_irqsource_for_host(host_id), bus_attr->bus_cfg.intr_flags | ESP_INTR_FLAG_INTRDISABLED, spi_intr, host, &host->intr);
+    // assert(err == ESP_OK);
+
+    // interrupts are not allowed on SPI1 bus
+    if (host_id != SPI1_HOST) {
+#if (SOC_CPU_CORES_NUM > 1) && (!CONFIG_FREERTOS_UNICORE)
+        if(bus_attr->bus_cfg.isr_cpu_id > INTR_CPU_ID_AUTO) {
+            SPI_CHECK(bus_attr->bus_cfg.isr_cpu_id <= INTR_CPU_ID_1, "invalid core id", ESP_ERR_INVALID_ARG);
+            spi_ipc_param_t ipc_arg = {
+                .spi_host = host,
+                .err = &err,
+            };
+            esp_ipc_call_blocking(INTR_CPU_CONVERT_ID(bus_attr->bus_cfg.isr_cpu_id), ipc_isr_reg_to_core, (void *) &ipc_arg);
+        } else
+#endif
+        {
+            err = esp_intr_alloc(spicommon_irqsource_for_host(host_id), bus_attr->bus_cfg.intr_flags | ESP_INTR_FLAG_INTRDISABLED, spi_intr, host, &host->intr);
+        }
+    }
+
+    // assert(handle->host->device[handle->id] == handle);
+    // handle->host->device[handle->id] = NULL;
+    // free(handle);
+    return err;
+
+}
+
+
 int spi_get_actual_clock(int fapb, int hz, int duty_cycle)
 {
     return spi_hal_master_cal_clock(fapb, hz, duty_cycle);
@@ -573,7 +656,8 @@ static inline SPI_MASTER_ISR_ATTR bool spi_bus_device_is_polling(spi_device_t *d
 // The interrupt may get invoked by the bus lock.
 static void SPI_MASTER_ISR_ATTR spi_bus_intr_enable(void *host)
 {
-    esp_intr_enable(((spi_host_t*)host)->intr);
+    intr_handle_t intr = ((spi_host_t*)host)->intr;
+    esp_intr_enable(intr);
 }
 
 // The interrupt is always disabled by the ISR itself, not exposed

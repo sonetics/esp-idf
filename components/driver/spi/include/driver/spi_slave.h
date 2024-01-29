@@ -185,6 +185,22 @@ esp_err_t spi_slave_get_trans_result(spi_host_device_t host, spi_slave_transacti
  */
 esp_err_t spi_slave_transmit(spi_host_device_t host, spi_slave_transaction_t *trans_desc, TickType_t ticks_to_wait);
 
+/**
+ * @brief Disable a SPI bus (can be enabled again later)
+ * 
+ * @param host SPI peripheral to disable
+ * @return esp_err_t 
+ */
+esp_err_t spi_slave_disable(spi_host_device_t host);
+
+/**
+ * @brief Enable a disabled SPI bus 
+ * 
+ * @param host SPI peripheral to enable
+ * @param bus_config Pointer to a spi_bus_config_t struct specifying how the bus should be initialized
+ * @return esp_err_t 
+ */
+esp_err_t spi_slave_enable(spi_host_device_t host, const spi_bus_config_t *bus_config);
 
 #ifdef __cplusplus
 }
