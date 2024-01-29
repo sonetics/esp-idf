@@ -406,6 +406,28 @@ int spi_get_freq_limit(bool gpio_is_used, int input_delay_ns);
  */
 esp_err_t spi_bus_get_max_transaction_len(spi_host_device_t host_id, size_t *max_bytes);
 
+/**
+ * @brief Disable a device on the SPI bus
+ *
+ * @param handle Device handle to disable
+ * @return
+ *         - ESP_ERR_INVALID_ARG   if parameter is invalid
+ *         - ESP_ERR_INVALID_STATE if device already is disabled
+ *         - ESP_OK                on success
+ */
+esp_err_t spi_bus_disable_device(spi_device_handle_t handle);
+
+/**
+ * @brief Enable a device on the SPI bus
+ *
+ * @param handle Device handle to enable
+ * @return
+ *         - ESP_ERR_INVALID_ARG   if parameter is invalid
+ *         - ESP_ERR_INVALID_STATE if device already is enabled
+ *         - ESP_OK                on success
+ */
+esp_err_t spi_bus_enable_device(spi_device_handle_t handle);
+
 #ifdef __cplusplus
 }
 #endif
