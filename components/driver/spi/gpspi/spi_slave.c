@@ -386,7 +386,6 @@ esp_err_t spi_slave_enable(spi_host_device_t host, const spi_bus_config_t *bus_c
     }
 #endif //CONFIG_PM_ENABLE
 
-
     int flags = bus_config->intr_flags | ESP_INTR_FLAG_INTRDISABLED;
     err = esp_intr_alloc(spicommon_irqsource_for_host(host), flags, spi_intr, (void *)spihost[host], &spihost[host]->intr);
     if (err != ESP_OK) {
@@ -394,8 +393,15 @@ esp_err_t spi_slave_enable(spi_host_device_t host, const spi_bus_config_t *bus_c
         goto enable_cleanup;
     }
 
-    // spi_slave_hal_context_t *hal = &spihost[host]->hal;
-    // spi_slave_hal_setup_device(hal);
+    spi_slave_hal_context_t *hal = &spihost[host]->hal;
+    //assign the SPI, RX DMA and TX DMA peripheral registers beginning address
+    spi_slave_hal_config_t hal_config = {
+        .host_id = host,
+        .dma_in = SPI_LL_GET_HW(host),
+        .dma_out = SPI_LL_GET_HW(host)
+    };
+    spi_slave_hal_reload(hal, &hal_config);
+    spi_slave_hal_setup_device(hal);
 
     return ESP_OK;
 

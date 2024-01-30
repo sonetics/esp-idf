@@ -580,15 +580,6 @@ esp_err_t spi_bus_enable_device(spi_device_handle_t handle)
     int freecs = handle->id;
     if (spics_io_num >= 0) spicommon_cs_initialize(host_id, spics_io_num, freecs, use_gpio);
 
-    //Kill queues
-    // vQueueDelete(handle->trans_queue);
-    // vQueueDelete(handle->ret_queue);
-    // spi_bus_lock_unregister_dev(handle->dev_lock);
-    
-    // MDB tried this first, but seemed transaction never finished
-    // err = esp_intr_alloc(spicommon_irqsource_for_host(host_id), bus_attr->bus_cfg.intr_flags | ESP_INTR_FLAG_INTRDISABLED, spi_intr, host, &host->intr);
-    // assert(err == ESP_OK);
-
     // interrupts are not allowed on SPI1 bus
     if (host_id != SPI1_HOST) {
 #if (SOC_CPU_CORES_NUM > 1) && (!CONFIG_FREERTOS_UNICORE)
@@ -660,10 +651,6 @@ esp_err_t spi_bus_enable_device(spi_device_handle_t handle)
     temp_timing_conf.clock_source = clk_src;
     SPI_CHECK(ret == ESP_OK, "assigned clock speed not supported", ret);
 
-
-    // assert(handle->host->device[handle->id] == handle);
-    // handle->host->device[handle->id] = NULL;
-    // free(handle);
     return err;
 
 }

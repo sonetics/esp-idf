@@ -89,6 +89,14 @@ typedef struct {
 void spi_slave_hal_init(spi_slave_hal_context_t *hal, const spi_slave_hal_config_t *hal_config);
 
 /**
+ * @brief Reload the peripheral from the hal context.
+ * 
+ * @param hal 
+ * @param hal_config 
+ */
+void spi_slave_hal_reload(spi_slave_hal_context_t *hal, const spi_slave_hal_config_t *hal_config);
+
+/**
  * Deinit the peripheral (and the context if needed).
  *
  * @param hal Context of the HAL layer.
