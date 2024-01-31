@@ -699,6 +699,11 @@ IRAM_ATTR bool spi_bus_lock_touch(spi_bus_lock_dev_handle_t dev_handle)
     return (dev_handle != last_dev);
 }
 
+IRAM_ATTR void spi_bus_lock_untouch(spi_bus_lock_dev_handle_t dev_handle)
+{
+    dev_handle->parent->last_dev = NULL;
+}
+
 /*******************************************************************************
  * Acquiring service
  ******************************************************************************/

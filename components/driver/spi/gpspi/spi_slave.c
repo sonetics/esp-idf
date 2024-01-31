@@ -317,25 +317,31 @@ esp_err_t spi_slave_free(spi_host_device_t host)
     return ESP_OK;
 }
 
+esp_err_t spi_slave_get_dma_config(spi_host_device_t host, spi_bus_dma_config_t *dma_conf)
+{
+    esp_err_t err = ESP_OK;
+    spi_slave_hal_context_t *hal = &spihost[host]->hal;
+
+    dma_conf->tx_chan = hal->tx_dma_chan;
+    dma_conf->rx_chan = hal->rx_dma_chan;
+    dma_conf->tx_descriptor = hal->dmadesc_tx;
+    dma_conf->rx_descriptor = hal->dmadesc_rx;
+    dma_conf->descriptor_count = hal->dmadesc_n;
+    dma_conf->enabled = hal->use_dma;
+    dma_conf->max_transfer_sz = spihost[host]->max_transfer_sz;
+
+    return err;
+}
+
 /// Copied from spi_slave_free() and modified to not free the spihost[host] pointer
 esp_err_t spi_slave_disable(spi_host_device_t host)
 {
     SPI_CHECK(is_valid_host(host), "invalid host", ESP_ERR_INVALID_ARG);
     SPI_CHECK(spihost[host], "host not slave", ESP_ERR_INVALID_ARG);
-    // if (spihost[host]->trans_queue) vQueueDelete(spihost[host]->trans_queue);
-    // if (spihost[host]->ret_queue) vQueueDelete(spihost[host]->ret_queue);
-    // if (spihost[host]->dma_enabled) {
-    //     spicommon_dma_chan_free(host);
-    // }
-    // free(spihost[host]->hal.dmadesc_tx);
-    // free(spihost[host]->hal.dmadesc_rx);
-    assert(esp_intr_free(spihost[host]->intr) == ESP_OK);
+    assert(esp_intr_disable(spihost[host]->intr) == ESP_OK);
 #ifdef CONFIG_PM_ENABLE
     esp_pm_lock_release(spihost[host]->pm_lock);
-    // esp_pm_lock_delete(spihost[host]->pm_lock);
 #endif //CONFIG_PM_ENABLE
-
-    // assert(spicommon_periph_free(host) == ESP_OK);
 
     // spi_slave_free calls spi_common_periph_free, but this doesn't
     // free the IO (which seems like a bug). spi_bus_disable does free.
@@ -346,14 +352,6 @@ esp_err_t spi_slave_disable(spi_host_device_t host)
 
 esp_err_t spi_slave_enable(spi_host_device_t host, const spi_bus_config_t *bus_config)
 {
-    /*
-    bool spi_chan_claimed;
-    esp_err_t ret = ESP_OK;
-    spi_chan_claimed=spicommon_periph_claim(host, "spi slave");
-    SPI_CHECK(spi_chan_claimed, "host already in use", ESP_ERR_INVALID_STATE);
-    return ret;
-    */
-   SPI_CHECK(is_valid_host(host), "invalid host", ESP_ERR_INVALID_ARG);
 
     bool spi_chan_claimed;
     esp_err_t ret = ESP_OK;
@@ -386,12 +384,7 @@ esp_err_t spi_slave_enable(spi_host_device_t host, const spi_bus_config_t *bus_c
     }
 #endif //CONFIG_PM_ENABLE
 
-    int flags = bus_config->intr_flags | ESP_INTR_FLAG_INTRDISABLED;
-    err = esp_intr_alloc(spicommon_irqsource_for_host(host), flags, spi_intr, (void *)spihost[host], &spihost[host]->intr);
-    if (err != ESP_OK) {
-        ret = err;
-        goto enable_cleanup;
-    }
+    assert(esp_intr_enable(spihost[host]->intr)==ESP_OK);
 
     spi_slave_hal_context_t *hal = &spihost[host]->hal;
     //assign the SPI, RX DMA and TX DMA peripheral registers beginning address

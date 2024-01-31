@@ -202,6 +202,17 @@ esp_err_t spi_slave_disable(spi_host_device_t host);
  */
 esp_err_t spi_slave_enable(spi_host_device_t host, const spi_bus_config_t *bus_config);
 
+
+/**
+ * @brief Get an initialized SPI slave bus DMA configuration.
+ * 
+ * @param host SPI peripheral to get configuration from
+ * @param dma_conf Pointer to configuration where result is stored
+ * @return esp_err_t 
+ */
+esp_err_t spi_slave_get_dma_config(spi_host_device_t host, spi_bus_dma_config_t *dma_conf);
+
+
 #ifdef __cplusplus
 }
 #endif
