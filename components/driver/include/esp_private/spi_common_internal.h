@@ -572,6 +572,15 @@ int spi_bus_lock_get_dev_id(spi_bus_lock_dev_handle_t dev_handle);
  */
 bool spi_bus_lock_touch(spi_bus_lock_dev_handle_t dev_handle);
 
+/**
+ * @brief Clear last touch caching
+ * @details Clear the last touch caching, so that the next `spi_bus_lock_touch` will
+ *         always return false (and hal will set the registers again).
+ * 
+ * @param dev_handle 
+ */
+void spi_bus_lock_untouch(spi_bus_lock_dev_handle_t dev_handle);
+
 /************* Acquiring service *********************/
 /**
  * Acquiring the SPI bus for exclusive use. Will also wait for the BG to finish all requests of
