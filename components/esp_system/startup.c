@@ -160,9 +160,43 @@ static void IRAM_ATTR start_cpu_other_cores_default(void)
 }
 #endif
 
+#define OLD_TRACERECORDER
+#ifdef OLD_TRACERECORDER
+#ifdef CONFIG_PERCEPIO_TRACERECORDER_ENABLED
+#include "esp_app_trace.h"
+#endif
+#endif
+
+
 static void do_core_init(void)
 {
+#ifdef OLD_TRACERECORDER
+       #ifdef CONFIG_PERCEPIO_TRACERECORDER_ENABLED
+       vTraceInitialize();
+	   #endif
+#endif
+
     do_system_init_fn(ESP_SYSTEM_INIT_STAGE_CORE);
+    
+    #ifdef OLD_TRACERECORDER
+       #if CONFIG_PERCEPIO_TRACERECORDER_ENABLED
+    #if CONFIG_PERCEPIO_RECORDER_TRC_RECORDER_MODE_STREAMING
+        esp_err_t trc_err;
+        trc_err = esp_apptrace_init();
+        assert(trc_err == ESP_OK && "Failed to init apptrace module on PRO CPU!");
+    #endif
+
+    #if CONFIG_PERCEPIO_RECORDER_CFG_START_MODE_START == 1
+        vTraceEnable(TRC_START);
+    #elif CONFIG_PERCEPIO_RECORDER_CFG_START_MODE_START_AWAIT_HOST == 1
+        vTraceEnable(TRC_START_AWAIT_HOST);
+    #else
+        vTraceEnable(TRC_INIT);
+    #endif
+#endif /*CONFIG_PERCEPIO_TRACERECORDER_ENABLED*/
+#endif
+
+    
 }
 
 static void do_secondary_init(void)
