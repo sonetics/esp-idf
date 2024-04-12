@@ -256,8 +256,22 @@ static void IRAM_ATTR start_cpu_other_cores_default(void)
 }
 #endif
 
+#define OLD_TRACERECORDER
+#ifdef OLD_TRACERECORDER
+#ifdef CONFIG_PERCEPIO_TRACERECORDER_ENABLED
+#include "esp_app_trace.h"
+#endif
+#endif
+
+
 static void do_core_init(void)
 {
+#ifdef OLD_TRACERECORDER
+       #ifdef CONFIG_PERCEPIO_TRACERECORDER_ENABLED
+       vTraceInitialize();
+#endif
+#endif
+
     /* Initialize heap allocator. WARNING: This *needs* to happen *after* the app cpu has booted.
        If the heap allocator is initialized first, it will put free memory linked list items into
        memory also used by the ROM. Starting the app cpu will let its ROM initialize that memory,
@@ -274,6 +288,25 @@ static void do_core_init(void)
     // esp_timer early initialization is required for esp_timer_get_time to work.
     esp_timer_early_init();
     esp_newlib_init();
+
+#ifdef OLD_TRACERECORDER
+       #if CONFIG_PERCEPIO_TRACERECORDER_ENABLED
+    #if CONFIG_PERCEPIO_RECORDER_TRC_RECORDER_MODE_STREAMING
+        esp_err_t trc_err;
+        trc_err = esp_apptrace_init();
+        assert(trc_err == ESP_OK && "Failed to init apptrace module on PRO CPU!");
+    #endif
+
+    #if CONFIG_PERCEPIO_RECORDER_CFG_START_MODE_START == 1
+        vTraceEnable(TRC_START);
+    #elif CONFIG_PERCEPIO_RECORDER_CFG_START_MODE_START_AWAIT_HOST == 1
+        vTraceEnable(TRC_START_AWAIT_HOST);
+    #else
+        vTraceEnable(TRC_INIT);
+    #endif
+#endif /*CONFIG_PERCEPIO_TRACERECORDER_ENABLED*/
+#endif
+
 
 #if CONFIG_SPIRAM_BOOT_INIT && (CONFIG_SPIRAM_USE_CAPS_ALLOC || CONFIG_SPIRAM_USE_MALLOC)
     if (esp_psram_is_initialized()) {
