@@ -54,14 +54,6 @@ extern "C" {
 
 #define I2S_NULL_POINTER_CHECK(tag, p)          ESP_RETURN_ON_FALSE((p), ESP_ERR_INVALID_ARG, tag, "input parameter '"#p"' is NULL")
 
-/**
- * @brief i2s channel state for checking if the operation in under right driver state
- */
-typedef enum {
-    I2S_CHAN_STATE_REGISTER,                /*!< i2s channel is registered (not initialized)  */
-    I2S_CHAN_STATE_READY,                   /*!< i2s channel is disabled (initialized) */
-    I2S_CHAN_STATE_RUNNING,                 /*!< i2s channel is idling (initialized and enabled) */
-} i2s_state_t;
 
 /**
  * @brief Group of I2S callbacks
@@ -84,75 +76,6 @@ typedef struct {
                                              *   The event data includes buffer size that has been overwritten
                                              */
 } i2s_event_callbacks_internal_t;
-
-/**
- * @brief i2s channel level configurations
- * @note  It performs as channel handle
- */
-typedef struct {
-#if SOC_GDMA_SUPPORTED
-    gdma_channel_handle_t   dma_chan;       /*!< gdma channel handle */
-#else
-    intr_handle_t           dma_chan;       /*!< interrupt channel handle */
-#endif
-    uint32_t                desc_num;       /*!< I2S DMA buffer number, it is also the number of DMA descriptor */
-    uint32_t                frame_num;      /*!< I2S frame number in one DMA buffer. One frame means one-time sample data in all slots */
-    uint32_t                buf_size;       /*!< dma buffer size */
-    bool                    auto_clear_after_cb;     /*!< Set to auto clear DMA TX descriptor after callback, i2s will always send zero automatically if no data to send */
-    bool                    auto_clear_before_cb;    /*!< Set to auto clear DMA TX descriptor before callback, i2s will always send zero automatically if no data to send */
-    uint32_t                rw_pos;         /*!< reading/writing pointer position */
-    void                    *curr_ptr;      /*!< Pointer to current dma buffer */
-    void                    *curr_desc;     /*!< Pointer to current dma descriptor used for pre-load */
-    lldesc_t                **desc;         /*!< dma descriptor array */
-    uint8_t                 **bufs;         /*!< dma buffer array */
-} i2s_dma_t;
-
-/**
- * @brief i2s controller level configurations
- * @note  Both i2s rx and tx channel are under its control
- */
-typedef struct {
-    i2s_port_t              id;             /*!< i2s port id */
-    i2s_hal_context_t       hal;            /*!< hal context */
-    uint32_t                chan_occupancy; /*!< channel occupancy (rx/tx) */
-    bool                    full_duplex;    /*!< is full_duplex */
-    i2s_chan_handle_t       tx_chan;        /*!< tx channel handler */
-    i2s_chan_handle_t       rx_chan;        /*!< rx channel handler */
-    int                     mclk;           /*!< MCK out pin, shared by tx/rx*/
-#if CONFIG_IDF_TARGET_ESP32
-    esp_clock_output_mapping_handle_t mclk_out_hdl; /*!< The handle of MCLK output signal */
-#endif
-} i2s_controller_t;
-
-struct i2s_channel_obj_t {
-    /* Channel basic information */
-    i2s_controller_t        *controller;    /*!< Parent pointer to controller object */
-    i2s_comm_mode_t         mode;           /*!< i2s channel communication mode */
-    i2s_role_t              role;           /*!< i2s role */
-    i2s_dir_t               dir;            /*!< i2s channel direction */
-    i2s_dma_t               dma;            /*!< i2s dma object */
-    i2s_state_t             state;          /*!< i2s driver state. Ensuring the driver working in a correct sequence */
-    /* Stored configurations */
-    int                     intr_prio_flags;/*!< i2s interrupt priority flags */
-    void                    *mode_info;     /*!< Slot, clock and gpio information of each mode */
-#if SOC_I2S_SUPPORTS_APLL
-    bool                    apll_en;        /*!< Flag of whether APLL enabled */
-#endif
-    uint32_t                active_slot;    /*!< Active slot number */
-    uint32_t                total_slot;     /*!< Total slot number */
-    /* Locks and queues */
-    SemaphoreHandle_t       mutex;          /*!< Mutex semaphore for the channel operations */
-    SemaphoreHandle_t       binary;         /*!< Binary semaphore for writing / reading / enabling / disabling */
-#if CONFIG_PM_ENABLE
-    esp_pm_lock_handle_t    pm_lock;        /*!< Power management lock, to avoid apb clock frequency changes while i2s is working */
-#endif
-    QueueHandle_t           msg_queue;      /*!< Message queue handler, used for transporting data between interrupt and read/write task */
-    uint64_t                reserve_gpio_mask; /*!< The gpio mask that has been reserved by I2S */
-    i2s_event_callbacks_internal_t   callbacks;      /*!< Callback functions */
-    void                    *user_data;     /*!< User data for callback functions */
-    void (*start)(i2s_chan_handle_t);       /*!< start tx/rx channel */
-    void (*stop)(i2s_chan_handle_t);        /*!< stop tx/rx channel */
-};
 
 /**
  * @brief i2s platform level configurations
