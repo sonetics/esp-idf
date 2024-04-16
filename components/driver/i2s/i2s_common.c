@@ -715,6 +715,62 @@ esp_err_t i2s_init_dma_intr(i2s_chan_handle_t handle, int intr_flag)
     return ESP_OK;
 }
 
+esp_err_t i2s_init_dma_intr_single_tx(i2s_chan_handle_t handle, int intr_flag)
+{
+    i2s_port_t port_id = handle->controller->id;
+    ESP_RETURN_ON_FALSE((port_id >= 0) && (port_id < SOC_I2S_NUM), ESP_ERR_INVALID_ARG, TAG, "invalid handle");
+#if SOC_GDMA_SUPPORTED
+    /* Set GDMA trigger module */
+    gdma_trigger_t trig = {.periph = GDMA_TRIG_PERIPH_I2S};
+
+    switch (port_id) {
+#if SOC_I2S_NUM > 1
+    case I2S_NUM_1:
+        trig.instance_id = SOC_GDMA_TRIG_PERIPH_I2S1;
+        break;
+#endif
+    default:
+        trig.instance_id = SOC_GDMA_TRIG_PERIPH_I2S0;
+        break;
+    }
+
+    /* Set GDMA config */
+    gdma_channel_alloc_config_t dma_cfg = {};
+    if (handle->dir == I2S_DIR_TX) {
+        dma_cfg.direction = GDMA_CHANNEL_DIRECTION_TX;
+        /* Register a new GDMA tx channel */
+        ESP_RETURN_ON_ERROR(gdma_new_channel(&dma_cfg, &handle->dma.dma_chan), TAG, "Register tx dma channel error");
+        ESP_RETURN_ON_ERROR(gdma_connect(handle->dma.dma_chan, trig), TAG, "Connect tx dma channel error");
+        //gdma_tx_event_callbacks_t cb = {.on_trans_eof = i2s_dma_tx_callback};
+        /* Set callback function for GDMA, the interrupt is triggered by GDMA, then the GDMA ISR will call the  callback function */
+        //gdma_register_tx_event_callbacks(handle->dma.dma_chan, &cb, handle);
+    } else {
+        dma_cfg.direction = GDMA_CHANNEL_DIRECTION_RX;
+        /* Register a new GDMA rx channel */
+        ESP_RETURN_ON_ERROR(gdma_new_channel(&dma_cfg, &handle->dma.dma_chan), TAG, "Register rx dma channel error");
+        ESP_RETURN_ON_ERROR(gdma_connect(handle->dma.dma_chan, trig), TAG, "Connect rx dma channel error");
+        gdma_rx_event_callbacks_t cb = {.on_recv_eof = i2s_dma_rx_callback};
+        /* Set callback function for GDMA, the interrupt is triggered by GDMA, then the GDMA ISR will call the  callback function */
+        gdma_register_rx_event_callbacks(handle->dma.dma_chan, &cb, handle);
+    }
+#else
+    intr_flag |= ESP_INTR_FLAG_SHARED;
+    /* Initialize I2S module interrupt */
+    if (handle->dir == I2S_DIR_TX) {
+        esp_intr_alloc_intrstatus(i2s_periph_signal[port_id].irq, intr_flag,
+                                    (uint32_t)i2s_ll_get_interrupt_status_reg(handle->controller->hal.dev), I2S_LL_TX_EVENT_MASK,
+                                    i2s_dma_tx_callback, handle, &handle->dma.dma_chan);
+    } else {
+        esp_intr_alloc_intrstatus(i2s_periph_signal[port_id].irq, intr_flag,
+                                    (uint32_t)i2s_ll_get_interrupt_status_reg(handle->controller->hal.dev), I2S_LL_RX_EVENT_MASK,
+                                    i2s_dma_rx_callback, handle, &handle->dma.dma_chan);
+    }
+    /* Start DMA */
+    i2s_ll_enable_dma(handle->controller->hal.dev, true);
+#endif // SOC_GDMA_SUPPORTED
+    return ESP_OK;
+}
+
 void i2s_gpio_check_and_set(gpio_num_t gpio, uint32_t signal_idx, bool is_input, bool is_invert)
 {
     /* Ignore the pin if pin = I2S_GPIO_UNUSED */
@@ -1147,6 +1203,49 @@ esp_err_t i2s_channel_write(i2s_chan_handle_t handle, const void *src, size_t si
     return ret;
 }
 
+esp_err_t i2s_channel_write_first(i2s_chan_handle_t handle, const void *src, size_t size, size_t *bytes_written, uint32_t timeout_ms)
+{
+    I2S_NULL_POINTER_CHECK(TAG, handle);
+    ESP_RETURN_ON_FALSE(handle->dir == I2S_DIR_TX, ESP_ERR_INVALID_ARG, TAG, "this channel is not tx channel");
+
+    esp_err_t ret = ESP_OK;
+    char *data_ptr;
+    char *src_byte;
+    size_t bytes_can_write;
+    if (bytes_written) {
+        *bytes_written = 0;
+    }
+
+    xSemaphoreTake(handle->mutex, portMAX_DELAY);
+
+    assert(size == handle->dma.buf_size);
+
+    handle->dma.curr_ptr = handle->dma.desc[0];
+    handle->dma.rw_pos = 0;
+
+    src_byte = (char *)src;
+    data_ptr = (char *)handle->dma.curr_ptr;
+    data_ptr += handle->dma.rw_pos;
+    bytes_can_write = handle->dma.buf_size - handle->dma.rw_pos;
+    if (bytes_can_write > size) {
+        bytes_can_write = size;
+    }
+    memcpy(data_ptr, src_byte, bytes_can_write);
+    size -= bytes_can_write;
+    src_byte += bytes_can_write;
+    handle->dma.rw_pos += bytes_can_write;
+    if (bytes_written) {
+        (*bytes_written) += bytes_can_write;
+    }
+
+    handle->dma.curr_ptr = NULL;
+
+    xSemaphoreGive(handle->mutex);
+
+    return ret;
+}
+
+
 esp_err_t i2s_channel_read(i2s_chan_handle_t handle, void *dest, size_t size, size_t *bytes_read, uint32_t timeout_ms)
 {
     I2S_NULL_POINTER_CHECK(TAG, handle);
@@ -1240,4 +1339,155 @@ size_t inline i2s_platform_get_dma_buffer_offset(void)
     /* Force to transfer address '0' into 'i2s_chan_handle_t' type,
      * then find the corresponding field , the address of this field is the offset of this type */
     return (size_t)&(((i2s_chan_handle_t)0)->dma.bufs);
+}
+
+void i2s_tx_setup_single_tx_dma(i2s_chan_handle_t handle)
+{
+
+    handle->dma.desc[1]->empty = (uint32_t)handle->dma.desc[1];
+    handle->dma.desc[1]->length = 9;  //TODO: probably could just be a size of 1, play with it
+    handle->dma.desc[1]->size = 9;
+    lldesc_t *desc_ptr = (lldesc_t *)handle->dma.desc[1];
+    //memset((uint8_t *)(desc_ptr->buf), 0xFF, handle->dma.desc[1]->length);
+    memset((uint8_t *)(desc_ptr->buf), 0x00, handle->dma.desc[1]->length);
+
+    handle->dma.desc[3]->empty = (uint32_t)handle->dma.desc[3];
+    handle->dma.desc[3]->length = 9;  //TODO: probably could just be a size of 1, play with it
+    handle->dma.desc[3]->size = 9;
+    desc_ptr = (lldesc_t *)handle->dma.desc[3];
+    //memset((uint8_t *)(desc_ptr->buf), 0xAA, handle->dma.desc[3]->length);
+    memset((uint8_t *)(desc_ptr->buf), 0x00, handle->dma.desc[3]->length);
+#if SOC_I2S_SUPPORTS_GDMA
+    gdma_append(handle->dma.dma_chan);
+#endif
+}
+
+void i2s_tx_single_buffer_dma(i2s_chan_handle_t handle, const void *src, size_t size)
+{
+    static int current_index = 0;
+    static int previous_index = 2;
+
+    assert(size == handle->dma.buf_size);
+
+    lldesc_t *desc_ptr = (lldesc_t *)handle->dma.desc[current_index];
+    memcpy((uint8_t *)(desc_ptr->buf), src, size);
+
+    handle->dma.desc[previous_index+1]->empty = (uint32_t)handle->dma.desc[current_index];
+    handle->dma.desc[current_index+1]->empty = (uint32_t)handle->dma.desc[current_index+1];
+#if SOC_I2S_SUPPORTS_GDMA
+    gdma_append(handle->dma.dma_chan);
+#endif
+
+    if(current_index == 2)
+    {
+        current_index = 0;
+        previous_index = 2;
+    }
+    else
+    {
+        current_index = 2;
+        previous_index = 0;
+    }
+}
+
+
+
+static void i2s_tx_channel_ready(i2s_chan_handle_t handle)
+{
+    i2s_hal_tx_reset(&(handle->controller->hal));
+#if SOC_GDMA_SUPPORTED
+    gdma_reset((handle->dma.dma_chan));
+#else
+    i2s_hal_tx_reset_dma(&(handle->controller->hal));
+#endif
+    i2s_hal_tx_reset_fifo(&(handle->controller->hal));
+#if SOC_GDMA_SUPPORTED
+    gdma_start((handle->dma.dma_chan), (uint32_t) handle->dma.desc[0]);
+#else
+    esp_intr_enable(handle->dma.dma_chan);
+    i2s_hal_tx_enable_intr(&(handle->controller->hal));
+    i2s_hal_tx_enable_dma(&(handle->controller->hal));
+    i2s_hal_tx_start_link(&(handle->controller->hal), (uint32_t) handle->dma.desc[0]);
+#endif
+}
+
+static void i2s_rx_channel_ready(i2s_chan_handle_t handle)
+{
+    i2s_hal_rx_reset(&(handle->controller->hal));
+#if SOC_GDMA_SUPPORTED
+    gdma_reset(handle->dma.dma_chan);
+#else
+    i2s_hal_rx_reset_dma(&(handle->controller->hal));
+#endif
+    i2s_hal_rx_reset_fifo(&(handle->controller->hal));
+#if SOC_GDMA_SUPPORTED
+    gdma_start(handle->dma.dma_chan, (uint32_t) handle->dma.desc[0]);
+#else
+    esp_intr_enable(handle->dma.dma_chan);
+    i2s_hal_rx_enable_intr(&(handle->controller->hal));
+    i2s_hal_rx_enable_dma(&(handle->controller->hal));
+    i2s_hal_rx_start_link(&(handle->controller->hal), (uint32_t) handle->dma.desc[0]);
+#endif
+}
+
+esp_err_t i2s_channel_setup_but_dont_start(i2s_chan_handle_t handle)
+{
+    I2S_NULL_POINTER_CHECK(TAG, handle);
+
+    esp_err_t ret = ESP_OK;
+
+    xSemaphoreTake(handle->mutex, portMAX_DELAY);
+    ESP_GOTO_ON_FALSE(handle->state == I2S_CHAN_STATE_READY, ESP_ERR_INVALID_STATE, err, TAG, "the channel has already enabled or not initialized");
+#if CONFIG_PM_ENABLE
+    esp_pm_lock_acquire(handle->pm_lock);
+#endif
+    if(handle->dir == I2S_DIR_RX)
+    {
+        i2s_rx_channel_ready(handle);
+    }
+    else
+    {
+        i2s_tx_channel_ready(handle);
+    }
+
+    handle->state = I2S_CHAN_STATE_RUNNING;
+    /* Reset queue */
+    xQueueReset(handle->msg_queue);
+    xSemaphoreGive(handle->mutex);
+    /* Give the binary semaphore to enable reading / writing task */
+    xSemaphoreGive(handle->binary);
+
+    ESP_LOGD(TAG, "i2s %s channel enabled", handle->dir == I2S_DIR_TX ? "tx" : "rx");
+    return ret;
+
+err:
+    xSemaphoreGive(handle->mutex);
+    return ret;
+}
+
+esp_err_t i2s_channel_start_already_setup(i2s_chan_handle_t handle)
+{
+    if(handle->dir == I2S_DIR_RX)
+    {
+        i2s_hal_rx_start(&(handle->controller->hal));
+    }
+    else
+    {
+        i2s_hal_tx_start(&(handle->controller->hal));
+    }
+
+    return ESP_OK;
+}
+
+uint32_t i2s_get_dma_desc_num(i2s_chan_handle_t handle)
+{
+    return handle->dma.desc_num;
+}
+uint8_t* i2s_get_dma_bufs(i2s_chan_handle_t handle, int index)
+{
+    return handle->dma.bufs[index];
+}
+void* i2s_get_dma_curr_ptr(i2s_chan_handle_t handle)
+{
+    return handle->dma.curr_ptr;
 }
