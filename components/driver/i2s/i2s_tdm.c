@@ -257,6 +257,68 @@ err:
     return ret;
 }
 
+esp_err_t i2s_channel_init_tdm_single_tx_mode(i2s_chan_handle_t handle, const i2s_tdm_config_t *tdm_cfg)
+{
+#if CONFIG_I2S_ENABLE_DEBUG_LOG
+    esp_log_level_set(TAG, ESP_LOG_DEBUG);
+#endif
+    I2S_NULL_POINTER_CHECK(TAG, handle);
+    esp_err_t ret = ESP_OK;
+
+    xSemaphoreTake(handle->mutex, portMAX_DELAY);
+    ESP_GOTO_ON_FALSE(handle->state == I2S_CHAN_STATE_REGISTER, ESP_ERR_INVALID_STATE, err, TAG, "the channel has initialized already");
+    handle->mode = I2S_COMM_MODE_TDM;
+    /* Allocate memory for storing the configurations of TDM mode */
+    if (handle->mode_info) {
+        free(handle->mode_info);
+    }
+    handle->mode_info = calloc(1, sizeof(i2s_tdm_config_t));
+    ESP_GOTO_ON_FALSE(handle->mode_info, ESP_ERR_NO_MEM, err, TAG, "no memory for storing the configurations");
+    ESP_GOTO_ON_ERROR(i2s_tdm_set_gpio(handle, &tdm_cfg->gpio_cfg), err, TAG, "initialize channel failed while setting gpio pins");
+    /* i2s_set_tdm_slot should be called before i2s_set_tdm_clock while initializing, because clock is relay on the slot */
+    ESP_GOTO_ON_ERROR(i2s_tdm_set_slot(handle, &tdm_cfg->slot_cfg), err, TAG, "initialize channel failed while setting slot");
+#if SOC_I2S_SUPPORTS_APLL
+    /* Enable APLL and acquire its lock when the clock source is APLL */
+    if (tdm_cfg->clk_cfg.clk_src == I2S_CLK_SRC_APLL) {
+        periph_rtc_apll_acquire();
+        handle->apll_en = true;
+    }
+#endif
+    ESP_GOTO_ON_ERROR(i2s_tdm_set_clock(handle, &tdm_cfg->clk_cfg), err, TAG, "initialize channel failed while setting clock");
+    ESP_GOTO_ON_ERROR(i2s_init_dma_intr_single_tx(handle, I2S_INTR_ALLOC_FLAGS), err, TAG, "initialize dma interrupt failed");
+
+#if SOC_I2S_HW_VERSION_2
+    /* Enable clock to start outputting mclk signal. Some codecs will reset once mclk stop */
+    if (handle->dir == I2S_DIR_TX) {
+        i2s_ll_tx_enable_tdm(handle->controller->hal.dev);
+        i2s_ll_tx_enable_clock(handle->controller->hal.dev);
+    } else {
+        i2s_ll_rx_enable_tdm(handle->controller->hal.dev);
+        i2s_ll_rx_enable_clock(handle->controller->hal.dev);
+    }
+#endif
+#ifdef CONFIG_PM_ENABLE
+    esp_pm_lock_type_t pm_type = ESP_PM_APB_FREQ_MAX;
+#if SOC_I2S_SUPPORTS_APLL
+    if (tdm_cfg->clk_cfg.clk_src == I2S_CLK_SRC_APLL) {
+        pm_type = ESP_PM_NO_LIGHT_SLEEP;
+    }
+#endif // SOC_I2S_SUPPORTS_APLL
+    ESP_RETURN_ON_ERROR(esp_pm_lock_create(pm_type, 0, "i2s_driver", &handle->pm_lock), TAG, "I2S pm lock create failed");
+#endif
+
+    /* Initialization finished, mark state as ready */
+    handle->state = I2S_CHAN_STATE_READY;
+    xSemaphoreGive(handle->mutex);
+    ESP_LOGD(TAG, "The %s channel on I2S%d has been initialized to TDM mode successfully",
+             handle->dir == I2S_DIR_TX ? "tx" : "rx", handle->controller->id);
+    return ret;
+
+err:
+    xSemaphoreGive(handle->mutex);
+    return ret;
+}
+
 esp_err_t i2s_channel_reconfig_tdm_clock(i2s_chan_handle_t handle, const i2s_tdm_clk_config_t *clk_cfg)
 {
     I2S_NULL_POINTER_CHECK(TAG, handle);

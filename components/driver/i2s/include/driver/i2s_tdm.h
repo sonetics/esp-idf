@@ -252,6 +252,7 @@ esp_err_t i2s_channel_reconfig_tdm_slot(i2s_chan_handle_t handle, const i2s_tdm_
  */
 esp_err_t i2s_channel_reconfig_tdm_gpio(i2s_chan_handle_t handle, const i2s_tdm_gpio_config_t *gpio_cfg);
 
+esp_err_t i2s_channel_init_tdm_single_tx_mode(i2s_chan_handle_t handle, const i2s_tdm_config_t *tdm_cfg);
 
 #ifdef __cplusplus
 }
