@@ -1503,7 +1503,7 @@ esp_err_t i2c_master_cmd_begin(i2c_port_t i2c_num, i2c_cmd_handle_t cmd_handle, 
     // Sometimes when the FSM get stuck, the ACK_ERR interrupt will occur endlessly until we reset the FSM and clear bus.
     esp_err_t ret = ESP_FAIL;
     i2c_obj_t *p_i2c = p_i2c_obj[i2c_num];
-    TickType_t ticks_start = xTaskGetTickCount();
+    // TickType_t ticks_start = xTaskGetTickCount();
     portBASE_TYPE res = xSemaphoreTake(p_i2c->cmd_mux, ticks_to_wait);
     if (res == pdFALSE) {
         return ESP_ERR_TIMEOUT;
@@ -1543,6 +1543,10 @@ esp_err_t i2c_master_cmd_begin(i2c_port_t i2c_num, i2c_cmd_handle_t cmd_handle, 
     i2c_cmd_evt_t evt;
     while (1) {
         TickType_t wait_time = xTaskGetTickCount();
+
+        // 4-22-24 MDB: Modified to accept whatever wait time
+        // is provided
+        /*
         if (wait_time - ticks_start > ticks_to_wait) { // out of time
             wait_time = I2C_CMD_ALIVE_INTERVAL_TICK;
         } else {
@@ -1551,6 +1555,9 @@ esp_err_t i2c_master_cmd_begin(i2c_port_t i2c_num, i2c_cmd_handle_t cmd_handle, 
                 wait_time = I2C_CMD_ALIVE_INTERVAL_TICK;
             }
         }
+        */
+        wait_time = ticks_to_wait;
+
         // In master mode, since we don't have an interrupt to detective bus error or FSM state, what we do here is to make
         // sure the interrupt mechanism for master mode is still working.
         // If the command sending is not finished and there is no interrupt any more, the bus is probably dead caused by external noise.
