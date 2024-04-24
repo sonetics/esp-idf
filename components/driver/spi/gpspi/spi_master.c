@@ -575,10 +575,7 @@ esp_err_t spi_bus_enable_device(spi_device_handle_t handle)
     int freecs = handle->id;
     if (spics_io_num >= 0) spicommon_cs_initialize(host_id, spics_io_num, freecs, use_gpio);
 
-    // interrupts are not allowed on SPI1 bus
-    if (host_id != SPI1_HOST) {
-        SPI_CHECK(esp_intr_enable(host->intr)==ESP_OK, "error enabling interrupts", ESP_ERR_INVALID_STATE);
-    }
+
 
 #if SOC_SPI_SUPPORT_CLK_RC_FAST
     if (dev_config->clock_source == SPI_CLK_SRC_RC_FAST) {
@@ -611,7 +608,13 @@ esp_err_t spi_bus_enable_device(spi_device_handle_t handle)
         .rx_dma_chan = bus_attr->rx_dma_chan,
         .dmadesc_n = bus_attr->dma_desc_num,
     };
+
     spi_hal_init(&handle->host->hal, host_id, &hal_config);
+
+    // interrupts are not allowed on SPI1 bus
+    if (host_id != SPI1_HOST) {
+        SPI_CHECK(esp_intr_enable(host->intr)==ESP_OK, "error enabling interrupts", ESP_ERR_INVALID_STATE);
+    }
 
     return err;
 
