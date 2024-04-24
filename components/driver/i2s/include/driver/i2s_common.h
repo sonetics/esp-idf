@@ -284,6 +284,7 @@ esp_err_t i2s_channel_preload_data(i2s_chan_handle_t tx_handle, const void *src,
  *      - ESP_ERR_INVALID_STATE I2S is not ready to write
  */
 esp_err_t i2s_channel_write(i2s_chan_handle_t handle, const void *src, size_t size, size_t *bytes_written, uint32_t timeout_ms);
+esp_err_t i2s_channel_write_first(i2s_chan_handle_t handle, const void *src, size_t size, size_t *bytes_written, uint32_t timeout_ms);
 
 /**
  * @brief I2S read data
