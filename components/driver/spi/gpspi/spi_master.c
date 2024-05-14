@@ -748,6 +748,7 @@ static void SPI_MASTER_ISR_ATTR spi_post_trans(spi_host_t *host)
     host->cur_cs = DEV_NUM_MAX;
 }
 
+#define PERCEPIO_TRACE_ISR
 // This is run in interrupt context.
 static void SPI_MASTER_ISR_ATTR spi_intr(void *arg)
 {
@@ -755,8 +756,28 @@ static void SPI_MASTER_ISR_ATTR spi_intr(void *arg)
     spi_host_t *host = (spi_host_t *)arg;
     const spi_bus_attr_t* bus_attr = host->bus_attr;
 
+	#ifdef PERCEPIO_TRACE_ISR
+	#ifdef CONFIG_PERCEPIO_TRACERECORDER_ENABLED
+    static traceString trace_string;
+    if(!trace_string)
+    {
+        trace_string = xTraceRegisterString("SPI Master ISR");
+    }
+
+    vTracePrint(trace_string, "SPI Master spi_intr begin");
+    #endif
+	#endif
+
     // assert(spi_hal_usr_is_done(&host->hal));
-    if (!spi_hal_usr_is_done(&host->hal)) return;
+    if (!spi_hal_usr_is_done(&host->hal))
+    {
+    	#ifdef PERCEPIO_TRACE_ISR
+    	#ifdef CONFIG_PERCEPIO_TRACERECORDER_ENABLED
+        vTracePrint(trace_string, "SPI Master spi_intr end");
+        #endif
+        #endif
+        return;
+    }
     /*
      * Help to skip the handling of in-flight transaction, and disable of the interrupt.
      * The esp_intr_enable will be called (b) after new BG request is queued (a) in the task;
@@ -847,6 +868,12 @@ static void SPI_MASTER_ISR_ATTR spi_intr(void *arg)
         // or resume acquiring device task (if quit due to bus acquiring).
     } while (!spi_bus_lock_bg_exit(lock, trans_found, &do_yield));
 
+	#ifdef PERCEPIO_TRACE_ISR
+	#ifdef CONFIG_PERCEPIO_TRACERECORDER_ENABLED
+    vTracePrint(trace_string, "SPI Master spi_intr end");
+    #endif
+    #endif
+    
     if (do_yield) portYIELD_FROM_ISR();
 }
 
