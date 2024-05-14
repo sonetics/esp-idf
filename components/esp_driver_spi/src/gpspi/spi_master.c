@@ -966,6 +966,7 @@ static void SPI_MASTER_ISR_ATTR spi_post_sct_trans(spi_host_t *host)
 }
 #endif  //#if SOC_SPI_SCT_SUPPORTED
 
+#define PERCEPIO_TRACE_ISR
 // This is run in interrupt context.
 static void SPI_MASTER_ISR_ATTR spi_intr(void *arg)
 {
@@ -977,12 +978,40 @@ static void SPI_MASTER_ISR_ATTR spi_intr(void *arg)
     const spi_dma_ctx_t *dma_ctx = host->dma_ctx;
 #endif
 
+	#ifdef PERCEPIO_TRACE_ISR
+	#ifdef CONFIG_PERCEPIO_TRACERECORDER_ENABLED
+    static traceString trace_string;
+    if(!trace_string)
+    {
+        trace_string = xTraceRegisterString("SPI Master ISR");
+    }
+
+    vTracePrint(trace_string, "SPI Master spi_intr begin");
+    #endif
+	#endif
+	
 #if SOC_SPI_SCT_SUPPORTED
     // assert(spi_hal_usr_is_done(&host->hal) || spi_hal_get_intr_mask(&host->hal, SPI_LL_INTR_SEG_DONE));
-    if (!(spi_hal_usr_is_done(&host->hal) || spi_hal_get_intr_mask(&host->hal, SPI_LL_INTR_SEG_DONE))) return;
+    if (!(spi_hal_usr_is_done(&host->hal) || spi_hal_get_intr_mask(&host->hal, SPI_LL_INTR_SEG_DONE)))
+    {
+        #ifdef PERCEPIO_TRACE_ISR
+    	#ifdef CONFIG_PERCEPIO_TRACERECORDER_ENABLED
+        vTracePrint(trace_string, "SPI Master spi_intr end");
+        #endif
+        #endif
+     	return;
+     }
 #else
     // assert(spi_hal_usr_is_done(&host->hal));
-    if (!spi_hal_usr_is_done(&host->hal)) return;
+    if (!spi_hal_usr_is_done(&host->hal)) 
+    {
+       	#ifdef PERCEPIO_TRACE_ISR
+    	#ifdef CONFIG_PERCEPIO_TRACERECORDER_ENABLED
+        vTracePrint(trace_string, "SPI Master spi_intr end");
+        #endif
+        #endif
+    	return;
+    }
 #endif
 
     /*
@@ -1108,6 +1137,12 @@ static void SPI_MASTER_ISR_ATTR spi_intr(void *arg)
         // or resume acquiring device task (if quit due to bus acquiring).
     } while (!spi_bus_lock_bg_exit(lock, trans_found, &do_yield));
 
+	#ifdef PERCEPIO_TRACE_ISR
+	#ifdef CONFIG_PERCEPIO_TRACERECORDER_ENABLED
+    vTracePrint(trace_string, "SPI Master spi_intr end");
+    #endif
+    #endif
+    
     if (do_yield) {
         portYIELD_FROM_ISR();
     }

@@ -492,7 +492,6 @@ esp_err_t spi_slave_enable(spi_host_device_t host, const spi_bus_config_t *bus_c
     }
 #endif //CONFIG_PM_ENABLE
 
-    assert(esp_intr_enable(spihost[host]->intr)==ESP_OK);
 
     spi_slave_hal_context_t *hal = &spihost[host]->hal;
     //assign the SPI, RX DMA and TX DMA peripheral registers beginning address
@@ -503,6 +502,11 @@ esp_err_t spi_slave_enable(spi_host_device_t host, const spi_bus_config_t *bus_c
     };
     spi_slave_hal_reload(hal, &hal_config);
     spi_slave_hal_setup_device(hal);
+
+    spi_ll_clear_int_stat(hal->hw);
+    spi_slave_queue_reset(host);
+    xQueueReset(spihost[host]->trans_queue);
+    assert(esp_intr_enable(spihost[host]->intr)==ESP_OK);
 
     return ESP_OK;
 
@@ -656,6 +660,7 @@ static void SPI_SLAVE_ISR_ATTR spi_slave_restart_after_dmareset(void *arg)
 }
 #endif  //#if CONFIG_IDF_TARGET_ESP32
 
+#define PERCEPIO_TRACE_ISR
 //This is run in interrupt context and apart from initialization and destruction, this is the only code
 //touching the host (=spihost[x]) variable. The rest of the data arrives in queues. That is why there are
 //no muxes in this code.
@@ -666,8 +671,25 @@ static void SPI_SLAVE_ISR_ATTR spi_intr(void *arg)
     spi_slave_t *host = (spi_slave_t *)arg;
     spi_slave_hal_context_t *hal = &host->hal;
 
+	#ifdef PERCEPIO_TRACE_ISR
+	#ifdef CONFIG_PERCEPIO_TRACERECORDER_ENABLED
+    static traceString trace_string;
+    if(!trace_string)
+    {
+        trace_string = xTraceRegisterString("SPI Slave ISR");
+    }
+
+    vTracePrint(trace_string, "SPI Slave spi_intr begin");
+    #endif
+    #endif
+
     // assert(spi_slave_hal_usr_is_done(hal));
     if (!spi_slave_hal_usr_is_done(hal)) {
+    	#ifdef PERCEPIO_TRACE_ISR
+    	#ifdef CONFIG_PERCEPIO_TRACERECORDER_ENABLED
+        vTracePrint(trace_string, "SPI Slave spi_intr end");
+        #endif
+        #endif
         return;
     }
 
@@ -702,6 +724,15 @@ static void SPI_SLAVE_ISR_ATTR spi_intr(void *arg)
         if (host->cfg.post_trans_cb) {
             host->cfg.post_trans_cb(host->cur_trans.trans);
         }
+        
+        #ifdef PERCEPIO_TRACE_ISR
+        #ifdef CONFIG_PERCEPIO_TRACERECORDER_ENABLED
+        if(host->cur_trans->trans_len == 0)
+        {
+            vTracePrint(trace_string, "SPI Slave spi_intr trans_len 0");
+        }
+        #endif
+        #endif
 
         if (!(host->cfg.flags & SPI_SLAVE_NO_RETURN_RESULT)) {
             xQueueSendFromISR(host->ret_queue, &host->cur_trans, &do_yield);
@@ -717,6 +748,11 @@ static void SPI_SLAVE_ISR_ATTR spi_intr(void *arg)
         if (spicommon_dmaworkaround_reset_in_progress()) {
             //We need to wait for the reset to complete. Disable int (will be re-enabled on reset callback) and exit isr.
             esp_intr_disable(host->intr);
+            #ifdef PERCEPIO_TRACE_ISR
+            #ifdef CONFIG_PERCEPIO_TRACERECORDER_ENABLED
+            vTracePrint(trace_string, "SPI Slave spi_intr end");
+            #endif
+            #endif
             if (do_yield) {
                 portYIELD_FROM_ISR();
             }
@@ -765,6 +801,11 @@ static void SPI_SLAVE_ISR_ATTR spi_intr(void *arg)
             host->cfg.post_setup_cb(priv_trans.trans);
         }
     }
+    #ifdef PERCEPIO_TRACE_ISR
+    #ifdef CONFIG_PERCEPIO_TRACERECORDER_ENABLED
+    vTracePrint(trace_string, "SPI Slave spi_intr end");
+    #endif
+    #endif
     if (do_yield) {
         portYIELD_FROM_ISR();
     }
