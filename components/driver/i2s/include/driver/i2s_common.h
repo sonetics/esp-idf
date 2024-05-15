@@ -330,6 +330,8 @@ esp_err_t i2s_channel_start_already_setup(i2s_chan_handle_t handle);
 uint32_t i2s_get_dma_desc_num(i2s_chan_handle_t handle);
 uint8_t* i2s_get_dma_bufs(i2s_chan_handle_t handle, int index);
 void* i2s_get_dma_curr_ptr(i2s_chan_handle_t handle);
+esp_err_t i2s_channel_write_first_dma_buf(i2s_chan_handle_t tx_handle, const void *src, size_t size, size_t *bytes_loaded);
+
 
 #ifdef __cplusplus
 }

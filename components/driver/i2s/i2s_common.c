@@ -1203,46 +1203,49 @@ esp_err_t i2s_channel_write(i2s_chan_handle_t handle, const void *src, size_t si
     return ret;
 }
 
-esp_err_t i2s_channel_write_first(i2s_chan_handle_t handle, const void *src, size_t size, size_t *bytes_written, uint32_t timeout_ms)
+esp_err_t i2s_channel_write_first_dma_buf(i2s_chan_handle_t tx_handle, const void *src, size_t size, size_t *bytes_loaded)
 {
-    I2S_NULL_POINTER_CHECK(TAG, handle);
-    ESP_RETURN_ON_FALSE(handle->dir == I2S_DIR_TX, ESP_ERR_INVALID_ARG, TAG, "this channel is not tx channel");
+    I2S_NULL_POINTER_CHECK(TAG, tx_handle);
+    ESP_RETURN_ON_FALSE(tx_handle->dir == I2S_DIR_TX, ESP_ERR_INVALID_ARG, TAG, "this channel is not tx channel");
+    ESP_RETURN_ON_FALSE(tx_handle->state == I2S_CHAN_STATE_READY, ESP_ERR_INVALID_STATE, TAG, "data can only be preloaded when the channel is READY");
 
-    esp_err_t ret = ESP_OK;
-    char *data_ptr;
-    char *src_byte;
-    size_t bytes_can_write;
-    if (bytes_written) {
-        *bytes_written = 0;
+    uint8_t *data_ptr = (uint8_t *)src;
+    size_t remain_bytes = size;
+    size_t total_loaded_bytes = 0;
+
+    xSemaphoreTake(tx_handle->mutex, portMAX_DELAY);
+
+    /* The pre-load data will be loaded from the first descriptor */
+    if (tx_handle->dma.curr_ptr == NULL) {
+        tx_handle->dma.curr_ptr = tx_handle->dma.desc[0];
+        tx_handle->dma.rw_pos = 0;
     }
+    lldesc_t *desc_ptr = (lldesc_t *)tx_handle->dma.curr_ptr;
 
-    xSemaphoreTake(handle->mutex, portMAX_DELAY);
-
-    assert(size == handle->dma.buf_size);
-
-    handle->dma.curr_ptr = handle->dma.desc[0];
-    handle->dma.rw_pos = 0;
-
-    src_byte = (char *)src;
-    data_ptr = (char *)handle->dma.curr_ptr;
-    data_ptr += handle->dma.rw_pos;
-    bytes_can_write = handle->dma.buf_size - handle->dma.rw_pos;
-    if (bytes_can_write > size) {
-        bytes_can_write = size;
+    /* Loop until no bytes in source buff remain or the descriptors are full */
+    while (remain_bytes) {
+        size_t bytes_can_load = remain_bytes > (tx_handle->dma.buf_size - tx_handle->dma.rw_pos) ?
+                            (tx_handle->dma.buf_size - tx_handle->dma.rw_pos) : remain_bytes;
+        /* When all the descriptors has loaded data, no more bytes can be loaded, break directly */
+        if (bytes_can_load == 0) {
+            break;
+        }
+        /* Load the data from the last loaded position */
+        memcpy((uint8_t *)(desc_ptr->buf + tx_handle->dma.rw_pos), data_ptr, bytes_can_load);
+        data_ptr += bytes_can_load;             // Move forward the data pointer
+        total_loaded_bytes += bytes_can_load;   // Add to the total loaded bytes
+        remain_bytes -= bytes_can_load;         // Update the remaining bytes to be loaded
+        tx_handle->dma.rw_pos += bytes_can_load;   // Move forward the dma buffer position
+        /* When the current position reach the end of the dma buffer */
+        if (tx_handle->dma.rw_pos == tx_handle->dma.buf_size) {
+            xQueueSend(tx_handle->msg_queue, &(tx_handle->dma.desc[1]->buf), 0);
+        }
     }
-    memcpy(data_ptr, src_byte, bytes_can_write);
-    size -= bytes_can_write;
-    src_byte += bytes_can_write;
-    handle->dma.rw_pos += bytes_can_write;
-    if (bytes_written) {
-        (*bytes_written) += bytes_can_write;
-    }
+    *bytes_loaded = total_loaded_bytes;
 
-    handle->dma.curr_ptr = NULL;
+    xSemaphoreGive(tx_handle->mutex);
 
-    xSemaphoreGive(handle->mutex);
-
-    return ret;
+    return ESP_OK;
 }
 
 
@@ -1450,12 +1453,10 @@ esp_err_t i2s_channel_setup_but_dont_start(i2s_chan_handle_t handle)
         i2s_tx_channel_ready(handle);
     }
 
-    handle->state = I2S_CHAN_STATE_RUNNING;
+    handle->state = I2S_CHAN_STATE_READY;
     /* Reset queue */
     xQueueReset(handle->msg_queue);
     xSemaphoreGive(handle->mutex);
-    /* Give the binary semaphore to enable reading / writing task */
-    xSemaphoreGive(handle->binary);
 
     ESP_LOGD(TAG, "i2s %s channel enabled", handle->dir == I2S_DIR_TX ? "tx" : "rx");
     return ret;
@@ -1467,6 +1468,14 @@ err:
 
 esp_err_t i2s_channel_start_already_setup(i2s_chan_handle_t handle)
 {
+    xSemaphoreTake(handle->mutex, portMAX_DELAY);
+    handle->state = I2S_CHAN_STATE_RUNNING;
+    xSemaphoreGive(handle->mutex);
+
+    /* Give the binary semaphore to enable reading / writing task */
+    xSemaphoreGive(handle->binary);
+
+
     if(handle->dir == I2S_DIR_RX)
     {
         i2s_hal_rx_start(&(handle->controller->hal));
