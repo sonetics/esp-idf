@@ -201,7 +201,13 @@ static void ipc_isr_reg_to_core(void *args)
 {
     spi_host_t *host = ((spi_ipc_param_t *)args)->spi_host;
     const spi_bus_attr_t* bus_attr = host->bus_attr;
-    *((spi_ipc_param_t *)args)->err = esp_intr_alloc(spicommon_irqsource_for_host(host->id), bus_attr->bus_cfg.intr_flags | ESP_INTR_FLAG_INTRDISABLED, spi_intr, host, &host->intr);
+    //*((spi_ipc_param_t *)args)->err = esp_intr_alloc(spicommon_irqsource_for_host(host->id), bus_attr->bus_cfg.intr_flags | ESP_INTR_FLAG_INTRDISABLED, spi_intr, host, &host->intr);
+    spi_dev_t *hw = SPI_LL_GET_HW(host->id);
+#ifdef CONFIG_IDF_TARGET_ESP32
+    *((spi_ipc_param_t *)args)->err = esp_intr_alloc_intrstatus(spicommon_irqsource_for_host(host->id), bus_attr->bus_cfg.intr_flags | ESP_INTR_FLAG_INTRDISABLED, (uint32_t)&hw->slave, SPI_TRANS_DONE, spi_intr, host, &host->intr);
+#else
+    *((spi_ipc_param_t *)args)->err = esp_intr_alloc_intrstatus(spicommon_irqsource_for_host(host->id), bus_attr->bus_cfg.intr_flags | ESP_INTR_FLAG_INTRDISABLED, (uint32_t)&hw->dma_int_raw, SPI_TRANS_DONE_INT_RAW, spi_intr, host, &host->intr);
+#endif
 }
 #endif
 
@@ -242,7 +248,13 @@ static esp_err_t spi_master_init_driver(spi_host_device_t host_id)
         } else
 #endif
         {
-            err = esp_intr_alloc(spicommon_irqsource_for_host(host_id), bus_attr->bus_cfg.intr_flags | ESP_INTR_FLAG_INTRDISABLED, spi_intr, host, &host->intr);
+            //err = esp_intr_alloc(spicommon_irqsource_for_host(host_id), bus_attr->bus_cfg.intr_flags | ESP_INTR_FLAG_INTRDISABLED, spi_intr, host, &host->intr);
+            spi_dev_t *hw = SPI_LL_GET_HW(host_id);
+#ifdef CONFIG_IDF_TARGET_ESP32
+            err = esp_intr_alloc_intrstatus(spicommon_irqsource_for_host(host_id), bus_attr->bus_cfg.intr_flags | ESP_INTR_FLAG_INTRDISABLED, (uint32_t)&hw->slave, SPI_TRANS_DONE, spi_intr, host, &host->intr);
+#else
+            err = esp_intr_alloc_intrstatus(spicommon_irqsource_for_host(host_id), bus_attr->bus_cfg.intr_flags | ESP_INTR_FLAG_INTRDISABLED, (uint32_t)&hw->dma_int_raw, SPI_TRANS_DONE_INT_RAW, spi_intr, host, &host->intr);
+#endif
         }
         if (err != ESP_OK) {
             goto cleanup;
@@ -748,7 +760,7 @@ static void SPI_MASTER_ISR_ATTR spi_post_trans(spi_host_t *host)
     host->cur_cs = DEV_NUM_MAX;
 }
 
-#define PERCEPIO_TRACE_ISR
+//#define PERCEPIO_TRACE_ISR
 // This is run in interrupt context.
 static void SPI_MASTER_ISR_ATTR spi_intr(void *arg)
 {
@@ -768,7 +780,7 @@ static void SPI_MASTER_ISR_ATTR spi_intr(void *arg)
     #endif
 	#endif
 
-    // assert(spi_hal_usr_is_done(&host->hal));
+    assert(spi_hal_usr_is_done(&host->hal));
     if (!spi_hal_usr_is_done(&host->hal))
     {
     	#ifdef PERCEPIO_TRACE_ISR
@@ -870,11 +882,14 @@ static void SPI_MASTER_ISR_ATTR spi_intr(void *arg)
 
 	#ifdef PERCEPIO_TRACE_ISR
 	#ifdef CONFIG_PERCEPIO_TRACERECORDER_ENABLED
-    vTracePrint(trace_string, "SPI Master spi_intr end");
+    vTracePrintF(trace_string, "SPI Master spi_intr end do_yield:%d",do_yield);
     #endif
     #endif
     
-    if (do_yield) portYIELD_FROM_ISR();
+    if (do_yield)
+        {
+        portYIELD_FROM_ISR();
+        }
 }
 
 static SPI_MASTER_ISR_ATTR esp_err_t check_trans_valid(spi_device_handle_t handle, spi_transaction_t *trans_desc)

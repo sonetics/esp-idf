@@ -117,7 +117,13 @@ typedef struct {
 static void ipc_isr_reg_to_core(void *args)
 {
     spi_slave_t *host = ((spi_ipc_param_t *)args)->host;
-    *((spi_ipc_param_t *)args)->err = esp_intr_alloc(spicommon_irqsource_for_host(host->id), host->intr_flags | ESP_INTR_FLAG_INTRDISABLED, spi_intr, (void *)host, &host->intr);
+    //*((spi_ipc_param_t *)args)->err = esp_intr_alloc(spicommon_irqsource_for_host(host->id), host->intr_flags | ESP_INTR_FLAG_INTRDISABLED, spi_intr, (void *)host, &host->intr);
+    spi_dev_t *hw = SPI_LL_GET_HW(host->id);
+#ifdef CONFIG_IDF_TARGET_ESP32
+    *((spi_ipc_param_t *)args)->err = esp_intr_alloc_intrstatus(spicommon_irqsource_for_host(host->id), host->intr_flags | ESP_INTR_FLAG_INTRDISABLED, (uint32_t)((volatile void *)(&hw->slave)), SPI_TRANS_DONE, spi_intr, (void *)host, &host->intr);
+#else
+    *((spi_ipc_param_t *)args)->err = esp_intr_alloc_intrstatus(spicommon_irqsource_for_host(host->id), host->intr_flags | ESP_INTR_FLAG_INTRDISABLED, (uint32_t)((volatile void *)(&hw->dma_int_raw)), SPI_TRANS_DONE_INT_RAW, spi_intr, (void *)host, &host->intr);
+#endif
 }
 #endif
 
@@ -233,7 +239,13 @@ esp_err_t spi_slave_initialize(spi_host_device_t host, const spi_bus_config_t *b
     } else
 #endif
     {
-        err = esp_intr_alloc(spicommon_irqsource_for_host(host), bus_config->intr_flags | ESP_INTR_FLAG_INTRDISABLED, spi_intr, (void *)spihost[host], &spihost[host]->intr);
+        //err = esp_intr_alloc(spicommon_irqsource_for_host(host), bus_config->intr_flags | ESP_INTR_FLAG_INTRDISABLED, spi_intr, (void *)spihost[host], &spihost[host]->intr);
+        spi_dev_t *hw = SPI_LL_GET_HW(host);
+#ifdef CONFIG_IDF_TARGET_ESP32
+        err = esp_intr_alloc_intrstatus(spicommon_irqsource_for_host(host), bus_config->intr_flags | ESP_INTR_FLAG_INTRDISABLED, (uint32_t)&hw->slave, SPI_TRANS_DONE, spi_intr, (void *)spihost[host], &spihost[host]->intr);
+#else
+        err = esp_intr_alloc_intrstatus(spicommon_irqsource_for_host(host), bus_config->intr_flags | ESP_INTR_FLAG_INTRDISABLED, (uint32_t)&hw->dma_int_raw, SPI_TRANS_DONE_INT_RAW, spi_intr, (void *)spihost[host], &spihost[host]->intr);
+#endif
     }
     if (err != ESP_OK) {
         ret = err;
@@ -398,6 +410,7 @@ esp_err_t spi_slave_enable(spi_host_device_t host, const spi_bus_config_t *bus_c
     spi_ll_clear_int_stat(hal->hw);
     spi_slave_queue_reset(host);
     xQueueReset(spihost[host]->trans_queue);
+    xQueueReset(spihost[host]->ret_queue);
     assert(esp_intr_enable(spihost[host]->intr)==ESP_OK);
 
     return ESP_OK;
@@ -541,7 +554,7 @@ static void SPI_SLAVE_ISR_ATTR spi_slave_restart_after_dmareset(void *arg)
 }
 #endif  //#if CONFIG_IDF_TARGET_ESP32
 
-#define PERCEPIO_TRACE_ISR
+//#define PERCEPIO_TRACE_ISR
 //This is run in interrupt context and apart from initialization and destruction, this is the only code
 //touching the host (=spihost[x]) variable. The rest of the data arrives in queues. That is why there are
 //no muxes in this code.
@@ -565,7 +578,7 @@ static void SPI_SLAVE_ISR_ATTR spi_intr(void *arg)
     #endif
     #endif
 
-    // assert(spi_slave_hal_usr_is_done(hal));
+    assert(spi_slave_hal_usr_is_done(hal));
     if (!spi_slave_hal_usr_is_done(hal)) {
     	#ifdef PERCEPIO_TRACE_ISR
     	#ifdef CONFIG_PERCEPIO_TRACERECORDER_ENABLED
