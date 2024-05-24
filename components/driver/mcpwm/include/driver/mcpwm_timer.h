@@ -144,6 +144,8 @@ typedef struct {
  */
 esp_err_t mcpwm_timer_set_phase_on_sync(mcpwm_timer_handle_t timer, const mcpwm_timer_sync_phase_config_t *config);
 
+uint32_t mcpwm_timer_get_value(mcpwm_timer_handle_t timer_channel);
+
 #ifdef __cplusplus
 }
 #endif

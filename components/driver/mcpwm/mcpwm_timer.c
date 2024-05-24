@@ -386,3 +386,13 @@ static void IRAM_ATTR mcpwm_timer_default_isr(void *args)
         portYIELD_FROM_ISR();
     }
 }
+
+uint32_t mcpwm_timer_get_value(mcpwm_timer_handle_t timer_channel)
+{
+    mcpwm_timer_t *timer = timer_channel;
+    mcpwm_group_t *group = timer->group;
+    mcpwm_hal_context_t *hal = &group->hal;
+    int timer_id = timer->timer_id;
+
+    return mcpwm_ll_timer_get_count_value(hal->dev, timer_id);
+}
