@@ -201,13 +201,7 @@ static void ipc_isr_reg_to_core(void *args)
 {
     spi_host_t *host = ((spi_ipc_param_t *)args)->spi_host;
     const spi_bus_attr_t* bus_attr = host->bus_attr;
-    //*((spi_ipc_param_t *)args)->err = esp_intr_alloc(spicommon_irqsource_for_host(host->id), bus_attr->bus_cfg.intr_flags | ESP_INTR_FLAG_INTRDISABLED, spi_intr, host, &host->intr);
-    spi_dev_t *hw = SPI_LL_GET_HW(host->id);
-#ifdef CONFIG_IDF_TARGET_ESP32
-    *((spi_ipc_param_t *)args)->err = esp_intr_alloc_intrstatus(spicommon_irqsource_for_host(host->id), bus_attr->bus_cfg.intr_flags | ESP_INTR_FLAG_INTRDISABLED, (uint32_t)&hw->slave, SPI_TRANS_DONE, spi_intr, host, &host->intr);
-#else
-    *((spi_ipc_param_t *)args)->err = esp_intr_alloc_intrstatus(spicommon_irqsource_for_host(host->id), bus_attr->bus_cfg.intr_flags | ESP_INTR_FLAG_INTRDISABLED, (uint32_t)&hw->dma_int_raw, SPI_TRANS_DONE_INT_RAW, spi_intr, host, &host->intr);
-#endif
+    *((spi_ipc_param_t *)args)->err = esp_intr_alloc(spicommon_irqsource_for_host(host->id), bus_attr->bus_cfg.intr_flags | ESP_INTR_FLAG_INTRDISABLED, spi_intr, host, &host->intr);
 }
 #endif
 
@@ -248,13 +242,7 @@ static esp_err_t spi_master_init_driver(spi_host_device_t host_id)
         } else
 #endif
         {
-            //err = esp_intr_alloc(spicommon_irqsource_for_host(host_id), bus_attr->bus_cfg.intr_flags | ESP_INTR_FLAG_INTRDISABLED, spi_intr, host, &host->intr);
-            spi_dev_t *hw = SPI_LL_GET_HW(host_id);
-#ifdef CONFIG_IDF_TARGET_ESP32
-            err = esp_intr_alloc_intrstatus(spicommon_irqsource_for_host(host_id), bus_attr->bus_cfg.intr_flags | ESP_INTR_FLAG_INTRDISABLED, (uint32_t)&hw->slave, SPI_TRANS_DONE, spi_intr, host, &host->intr);
-#else
-            err = esp_intr_alloc_intrstatus(spicommon_irqsource_for_host(host_id), bus_attr->bus_cfg.intr_flags | ESP_INTR_FLAG_INTRDISABLED, (uint32_t)&hw->dma_int_raw, SPI_TRANS_DONE_INT_RAW, spi_intr, host, &host->intr);
-#endif
+            err = esp_intr_alloc(spicommon_irqsource_for_host(host_id), bus_attr->bus_cfg.intr_flags | ESP_INTR_FLAG_INTRDISABLED, spi_intr, host, &host->intr);
         }
         if (err != ESP_OK) {
             goto cleanup;
@@ -542,97 +530,6 @@ esp_err_t spi_device_get_actual_freq(spi_device_handle_t handle, int* freq_khz)
     return ESP_OK;
 }
 
-esp_err_t spi_bus_disable_device(spi_device_handle_t handle)
-{
-    SPI_CHECK(handle!=NULL, "invalid handle", ESP_ERR_INVALID_ARG);
-    //These checks aren't exhaustive; another thread could sneak in a transaction inbetween. These are only here to
-    //catch design errors and aren't meant to be triggered during normal operation.
-    SPI_CHECK(uxQueueMessagesWaiting(handle->trans_queue)==0, "Have unfinished transactions", ESP_ERR_INVALID_STATE);
-    SPI_CHECK(handle->host->cur_cs == DEV_NUM_MAX || handle->host->device[handle->host->cur_cs] != handle, "Have unfinished transactions", ESP_ERR_INVALID_STATE);
-    SPI_CHECK(uxQueueMessagesWaiting(handle->ret_queue)==0, "Have unfinished transactions", ESP_ERR_INVALID_STATE);
-
-    // spi_bus_lock_unregister_dev(handle->dev_lock);
-    spi_bus_lock_untouch(handle->dev_lock);
-
-    //return
-    int spics_io_num = handle->cfg.spics_io_num;
-    
-    if (spics_io_num >= 0) spicommon_cs_free_io(spics_io_num);
-
-    if (handle->host->intr) {
-        esp_intr_disable(handle->host->intr);
-    }
-
-    return ESP_OK;
-
-}
-
-esp_err_t spi_bus_enable_device(spi_device_handle_t handle)
-{
-    esp_err_t err = ESP_OK;
-    const spi_bus_attr_t *bus_attr = handle->host->bus_attr;
-    spi_device_interface_config_t *dev_config = &handle->cfg;
-    // spi_device_handle_t dev = handle;
-    
-    int use_gpio = !(bus_attr->flags & SPICOMMON_BUSFLAG_IOMUX_PINS);
-    // spicommon_cs_initialize(host_id, dev_config->spics_io_num, freecs, use_gpio);
-    
-    SPI_CHECK(handle!=NULL, "invalid handle", ESP_ERR_INVALID_ARG);
-    //return
-
-    spi_host_t *host = handle->host;
-    spi_host_device_t host_id = host->id;
-
-    int spics_io_num = handle->cfg.spics_io_num;
-    int freecs = handle->id;
-    if (spics_io_num >= 0) spicommon_cs_initialize(host_id, spics_io_num, freecs, use_gpio);
-
-
-
-#if SOC_SPI_SUPPORT_CLK_RC_FAST
-    if (dev_config->clock_source == SPI_CLK_SRC_RC_FAST) {
-        SPI_CHECK(periph_rtc_dig_clk8m_enable(), "the selected clock not available", ESP_ERR_INVALID_STATE);
-    }
-#endif
-    spi_clock_source_t clk_src = SPI_CLK_SRC_DEFAULT;
-    uint32_t clock_source_hz = 0;
-    if (dev_config->clock_source) {
-        clk_src = dev_config->clock_source;
-    }
-    esp_clk_tree_src_get_freq_hz(clk_src, ESP_CLK_TREE_SRC_FREQ_PRECISION_APPROX, &clock_source_hz);
-    SPI_CHECK((dev_config->clock_speed_hz > 0) && (dev_config->clock_speed_hz <= clock_source_hz), "invalid sclk speed", ESP_ERR_INVALID_ARG);
-#ifdef CONFIG_IDF_TARGET_ESP32
-    //The hardware looks like it would support this, but actually setting cs_ena_pretrans when transferring in full
-    //duplex mode does absolutely nothing on the ESP32.
-    SPI_CHECK(dev_config->cs_ena_pretrans <= 1 || (dev_config->address_bits == 0 && dev_config->command_bits == 0) ||
-        (dev_config->flags & SPI_DEVICE_HALFDUPLEX), "In full-duplex mode, only support cs pretrans delay = 1 and without address_bits and command_bits", ESP_ERR_INVALID_ARG);
-#endif
-
-    //assign the SPI, RX DMA and TX DMA peripheral registers beginning address
-    spi_hal_config_t hal_config = {
-        //On ESP32-S2 and earlier chips, DMA registers are part of SPI registers. Pass the registers of SPI peripheral to control it.
-        .dma_in = SPI_LL_GET_HW(host_id),
-        .dma_out = SPI_LL_GET_HW(host_id),
-        .dma_enabled = bus_attr->dma_enabled,
-        .dmadesc_tx = bus_attr->dmadesc_tx,
-        .dmadesc_rx = bus_attr->dmadesc_rx,
-        .tx_dma_chan = bus_attr->tx_dma_chan,
-        .rx_dma_chan = bus_attr->rx_dma_chan,
-        .dmadesc_n = bus_attr->dma_desc_num,
-    };
-
-    spi_hal_init(&handle->host->hal, host_id, &hal_config);
-
-    // interrupts are not allowed on SPI1 bus
-    if (host_id != SPI1_HOST) {
-        SPI_CHECK(esp_intr_enable(host->intr)==ESP_OK, "error enabling interrupts", ESP_ERR_INVALID_STATE);
-    }
-
-    return err;
-
-}
-
-
 int spi_get_actual_clock(int fapb, int hz, int duty_cycle)
 {
     return spi_hal_master_cal_clock(fapb, hz, duty_cycle);
@@ -676,8 +573,7 @@ static inline SPI_MASTER_ISR_ATTR bool spi_bus_device_is_polling(spi_device_t *d
 // The interrupt may get invoked by the bus lock.
 static void SPI_MASTER_ISR_ATTR spi_bus_intr_enable(void *host)
 {
-    intr_handle_t intr = ((spi_host_t*)host)->intr;
-    esp_intr_enable(intr);
+    esp_intr_enable(((spi_host_t*)host)->intr);
 }
 
 // The interrupt is always disabled by the ISR itself, not exposed
@@ -760,7 +656,6 @@ static void SPI_MASTER_ISR_ATTR spi_post_trans(spi_host_t *host)
     host->cur_cs = DEV_NUM_MAX;
 }
 
-//#define PERCEPIO_TRACE_ISR
 // This is run in interrupt context.
 static void SPI_MASTER_ISR_ATTR spi_intr(void *arg)
 {
@@ -768,28 +663,8 @@ static void SPI_MASTER_ISR_ATTR spi_intr(void *arg)
     spi_host_t *host = (spi_host_t *)arg;
     const spi_bus_attr_t* bus_attr = host->bus_attr;
 
-	#ifdef PERCEPIO_TRACE_ISR
-	#ifdef CONFIG_PERCEPIO_TRACERECORDER_ENABLED
-    static traceString trace_string;
-    if(!trace_string)
-    {
-        trace_string = xTraceRegisterString("SPI Master ISR");
-    }
-
-    vTracePrint(trace_string, "SPI Master spi_intr begin");
-    #endif
-	#endif
-
     assert(spi_hal_usr_is_done(&host->hal));
-    if (!spi_hal_usr_is_done(&host->hal))
-    {
-    	#ifdef PERCEPIO_TRACE_ISR
-    	#ifdef CONFIG_PERCEPIO_TRACERECORDER_ENABLED
-        vTracePrint(trace_string, "SPI Master spi_intr end");
-        #endif
-        #endif
-        return;
-    }
+
     /*
      * Help to skip the handling of in-flight transaction, and disable of the interrupt.
      * The esp_intr_enable will be called (b) after new BG request is queued (a) in the task;
@@ -880,16 +755,7 @@ static void SPI_MASTER_ISR_ATTR spi_intr(void *arg)
         // or resume acquiring device task (if quit due to bus acquiring).
     } while (!spi_bus_lock_bg_exit(lock, trans_found, &do_yield));
 
-	#ifdef PERCEPIO_TRACE_ISR
-	#ifdef CONFIG_PERCEPIO_TRACERECORDER_ENABLED
-    vTracePrintF(trace_string, "SPI Master spi_intr end do_yield:%d",do_yield);
-    #endif
-    #endif
-    
-    if (do_yield)
-        {
-        portYIELD_FROM_ISR();
-        }
+    if (do_yield) portYIELD_FROM_ISR();
 }
 
 static SPI_MASTER_ISR_ATTR esp_err_t check_trans_valid(spi_device_handle_t handle, spi_transaction_t *trans_desc)

@@ -13,7 +13,6 @@
 #include "esp_ipc.h"
 #include "intr_types.h"
 #include "hal/spi_types.h"
-#include "soc/lldesc.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -127,18 +126,6 @@ typedef struct {
 } spi_bus_config_t;
 
 
-typedef struct {
-  bool enabled;
-  uint32_t tx_chan;
-  uint32_t rx_chan;
-  lldesc_t *tx_descriptor;
-  lldesc_t *rx_descriptor;
-  int descriptor_count;
-  int max_transfer_sz;
-} spi_bus_dma_config_t;
-
-struct spi_host_t;
-
 /**
  * @brief Initialize a SPI bus
  *
@@ -179,41 +166,6 @@ esp_err_t spi_bus_initialize(spi_host_device_t host_id, const spi_bus_config_t *
  *         - ESP_OK                on success
  */
 esp_err_t spi_bus_free(spi_host_device_t host_id);
-
-/**
- * @brief Disable a SPI bus (can be enabled again later)
- *
- * @param host_id SPI peripheral to free
- * @return
- *         - ESP_ERR_INVALID_ARG   if parameter is invalid
- *         - ESP_ERR_INVALID_STATE if bus hasn't been initialized before, or not all devices on the bus are freed
- *         - ESP_OK                on success
- */
-esp_err_t spi_bus_disable(spi_host_device_t host_id);
-
-/**
- * @brief Enable a SPI bus (after it was disabled)
- *
- * @param host_id SPI peripheral to free
- * @return
- *         - ESP_ERR_INVALID_ARG   if parameter is invalid
- *         - ESP_ERR_INVALID_STATE if bus hasn't been initialized before, or not all devices on the bus are freed
- *         - ESP_OK                on successs
- */
-esp_err_t spi_bus_enable(spi_host_device_t host_id);
-
-/**
- * @brief Set the SPI bus DMA configuration for master mode
- * 
- * @detailed If the bus is initialized with DMA disabled, this
- * function allows sharing the DMA channels between a master and slave
- * configuration.
- * 
- * @parram host_id SPI peripheral to set DMA configuration for
- * @param dma_conf Configure to set for the SPI bus
- * @return esp_err_t 
- */
-esp_err_t spi_bus_set_dma_config(spi_host_device_t host_id, spi_bus_dma_config_t *dma_conf);
 
 #ifdef __cplusplus
 }
