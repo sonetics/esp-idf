@@ -755,27 +755,6 @@ spi_bus_lock_handle_t spi_bus_lock_get_by_id(spi_host_device_t host_id)
     return bus_ctx[host_id]->bus_attr.lock;
 }
 
-esp_err_t spi_bus_set_dma_config(spi_host_device_t host_id, spi_bus_dma_config_t *dma_conf)
-{
-    esp_err_t err = ESP_OK;
-    spi_bus_attr_t *bus_attr = NULL;
-    spicommon_bus_context_t *ctx = NULL;
-    
-    SPI_CHECK(is_valid_host(host_id), "invalid host_id", ESP_ERR_INVALID_ARG);
-    ctx = bus_ctx[host_id];
-    bus_attr = &ctx->bus_attr;
-    
-    bus_attr->tx_dma_chan = dma_conf->tx_chan;
-    bus_attr->rx_dma_chan = dma_conf->rx_chan;
-    bus_attr->dmadesc_tx = dma_conf->tx_descriptor;
-    bus_attr->dmadesc_rx = dma_conf->rx_descriptor;
-    bus_attr->dma_enabled = dma_conf->enabled;
-    bus_attr->dma_desc_num = dma_conf->descriptor_count;
-    bus_attr->max_transfer_sz = dma_conf->max_transfer_sz;
-    
-    return err;
-}
-
 //----------------------------------------------------------master bus init-------------------------------------------------------//
 esp_err_t spi_bus_initialize(spi_host_device_t host_id, const spi_bus_config_t *bus_config, spi_dma_chan_t dma_chan)
 {
@@ -785,10 +764,8 @@ esp_err_t spi_bus_initialize(spi_host_device_t host_id, const spi_bus_config_t *
     uint32_t actual_tx_dma_chan = 0;
     uint32_t actual_rx_dma_chan = 0;
 
-    bool spi_bus_allocated = bus_ctx[host_id] != NULL;
-
     SPI_CHECK(is_valid_host(host_id), "invalid host_id", ESP_ERR_INVALID_ARG);
-    // SPI_CHECK(bus_ctx[host_id] == NULL, "SPI bus already initialized.", ESP_ERR_INVALID_STATE);
+    SPI_CHECK(bus_ctx[host_id] == NULL, "SPI bus already initialized.", ESP_ERR_INVALID_STATE);
 #ifdef CONFIG_IDF_TARGET_ESP32
     SPI_CHECK(dma_chan >= SPI_DMA_DISABLED && dma_chan <= SPI_DMA_CH_AUTO, "invalid dma channel", ESP_ERR_INVALID_ARG );
 #elif CONFIG_IDF_TARGET_ESP32S2
@@ -804,17 +781,13 @@ esp_err_t spi_bus_initialize(spi_host_device_t host_id, const spi_bus_config_t *
     bool spi_chan_claimed = spicommon_periph_claim(host_id, "spi master");
     SPI_CHECK(spi_chan_claimed, "host_id already in use", ESP_ERR_INVALID_STATE);
 
-    if (!spi_bus_allocated) {
-        //clean and initialize the context
-        ctx = (spicommon_bus_context_t *)calloc(1, sizeof(spicommon_bus_context_t));
-        if (!ctx) {
-            err = ESP_ERR_NO_MEM;
-            goto cleanup;
-        }
-        bus_ctx[host_id] = ctx;
-    } else {
-        ctx = bus_ctx[host_id];
+    //clean and initialize the context
+    ctx = (spicommon_bus_context_t *)calloc(1, sizeof(spicommon_bus_context_t));
+    if (!ctx) {
+        err = ESP_ERR_NO_MEM;
+        goto cleanup;
     }
+    bus_ctx[host_id] = ctx;
     ctx->host_id = host_id;
     bus_attr = &ctx->bus_attr;
     bus_attr->bus_cfg = *bus_config;
@@ -931,45 +904,6 @@ esp_err_t spi_bus_free(spi_host_device_t host_id)
     bus_ctx[host_id] = NULL;
     return err;
 }
-
-esp_err_t spi_bus_disable(spi_host_device_t host_id)
-{
-    if (bus_ctx[host_id] == NULL) {
-        return ESP_ERR_INVALID_STATE;
-    }
-
-    esp_err_t err = ESP_OK;
-
-    SPI_CHECK(spicommon_periph_free(host_id), "spi bus disable failed", ESP_ERR_INVALID_STATE);
-    return err;
-}
-
-esp_err_t spi_bus_enable(spi_host_device_t host_id)
-{
-    esp_err_t err = ESP_OK;
-    spicommon_bus_context_t *ctx = NULL;
-    spi_bus_config_t *bus_config = NULL;
-    spi_bus_attr_t *bus_attr = NULL;
-
-    SPI_CHECK(is_valid_host(host_id), "invalid host_id", ESP_ERR_INVALID_ARG);
-
-    bool spi_chan_claimed = spicommon_periph_claim(host_id, "spi master");
-    SPI_CHECK(spi_chan_claimed, "host_id already in use", ESP_ERR_INVALID_STATE);
-
-    ctx = bus_ctx[host_id];
-
-    bus_attr = &ctx->bus_attr;
-    bus_config = &bus_attr->bus_cfg;
-
-    err = spicommon_bus_initialize_io(host_id, bus_config, SPICOMMON_BUSFLAG_MASTER | bus_config->flags, &bus_attr->flags);
-    if (err != ESP_OK) {
-        spicommon_periph_free(host_id);
-    }
-
-    return err;
-}
-
-
 
 esp_err_t spi_bus_register_destroy_func(spi_host_device_t host_id,
                                         spi_destroy_func_t f, void *arg)
