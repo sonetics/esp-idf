@@ -117,13 +117,7 @@ typedef struct {
 static void ipc_isr_reg_to_core(void *args)
 {
     spi_slave_t *host = ((spi_ipc_param_t *)args)->host;
-    //*((spi_ipc_param_t *)args)->err = esp_intr_alloc(spicommon_irqsource_for_host(host->id), host->intr_flags | ESP_INTR_FLAG_INTRDISABLED, spi_intr, (void *)host, &host->intr);
-    spi_dev_t *hw = SPI_LL_GET_HW(host->id);
-#ifdef CONFIG_IDF_TARGET_ESP32
-    *((spi_ipc_param_t *)args)->err = esp_intr_alloc_intrstatus(spicommon_irqsource_for_host(host->id), host->intr_flags | ESP_INTR_FLAG_INTRDISABLED, (uint32_t)((volatile void *)(&hw->slave)), SPI_TRANS_DONE, spi_intr, (void *)host, &host->intr);
-#else
-    *((spi_ipc_param_t *)args)->err = esp_intr_alloc_intrstatus(spicommon_irqsource_for_host(host->id), host->intr_flags | ESP_INTR_FLAG_INTRDISABLED, (uint32_t)((volatile void *)(&hw->dma_int_raw)), SPI_TRANS_DONE_INT_RAW, spi_intr, (void *)host, &host->intr);
-#endif
+    *((spi_ipc_param_t *)args)->err = esp_intr_alloc(spicommon_irqsource_for_host(host->id), host->intr_flags | ESP_INTR_FLAG_INTRDISABLED, spi_intr, (void *)host, &host->intr);
 }
 #endif
 
@@ -239,13 +233,7 @@ esp_err_t spi_slave_initialize(spi_host_device_t host, const spi_bus_config_t *b
     } else
 #endif
     {
-        //err = esp_intr_alloc(spicommon_irqsource_for_host(host), bus_config->intr_flags | ESP_INTR_FLAG_INTRDISABLED, spi_intr, (void *)spihost[host], &spihost[host]->intr);
-        spi_dev_t *hw = SPI_LL_GET_HW(host);
-#ifdef CONFIG_IDF_TARGET_ESP32
-        err = esp_intr_alloc_intrstatus(spicommon_irqsource_for_host(host), bus_config->intr_flags | ESP_INTR_FLAG_INTRDISABLED, (uint32_t)&hw->slave, SPI_TRANS_DONE, spi_intr, (void *)spihost[host], &spihost[host]->intr);
-#else
-        err = esp_intr_alloc_intrstatus(spicommon_irqsource_for_host(host), bus_config->intr_flags | ESP_INTR_FLAG_INTRDISABLED, (uint32_t)&hw->dma_int_raw, SPI_TRANS_DONE_INT_RAW, spi_intr, (void *)spihost[host], &spihost[host]->intr);
-#endif
+        err = esp_intr_alloc(spicommon_irqsource_for_host(host), bus_config->intr_flags | ESP_INTR_FLAG_INTRDISABLED, spi_intr, (void *)spihost[host], &spihost[host]->intr);
     }
     if (err != ESP_OK) {
         ret = err;
@@ -318,7 +306,7 @@ esp_err_t spi_slave_free(spi_host_device_t host)
     spicommon_bus_free_io_cfg(&spihost[host]->bus_config);
     free(spihost[host]->hal.dmadesc_tx);
     free(spihost[host]->hal.dmadesc_rx);
-    assert(esp_intr_free(spihost[host]->intr) == ESP_OK);
+    esp_intr_free(spihost[host]->intr);
 #ifdef CONFIG_PM_ENABLE
     esp_pm_lock_release(spihost[host]->pm_lock);
     esp_pm_lock_delete(spihost[host]->pm_lock);
@@ -327,107 +315,6 @@ esp_err_t spi_slave_free(spi_host_device_t host)
     spihost[host] = NULL;
     spicommon_periph_free(host);
     return ESP_OK;
-}
-
-esp_err_t spi_slave_get_dma_config(spi_host_device_t host, spi_bus_dma_config_t *dma_conf)
-{
-    esp_err_t err = ESP_OK;
-    spi_slave_hal_context_t *hal = &spihost[host]->hal;
-
-    dma_conf->tx_chan = hal->tx_dma_chan;
-    dma_conf->rx_chan = hal->rx_dma_chan;
-    dma_conf->tx_descriptor = hal->dmadesc_tx;
-    dma_conf->rx_descriptor = hal->dmadesc_rx;
-    dma_conf->descriptor_count = hal->dmadesc_n;
-    dma_conf->enabled = hal->use_dma;
-    dma_conf->max_transfer_sz = spihost[host]->max_transfer_sz;
-
-    return err;
-}
-
-/// Copied from spi_slave_free() and modified to not free the spihost[host] pointer
-esp_err_t spi_slave_disable(spi_host_device_t host)
-{
-    SPI_CHECK(is_valid_host(host), "invalid host", ESP_ERR_INVALID_ARG);
-    SPI_CHECK(spihost[host], "host not slave", ESP_ERR_INVALID_ARG);
-    assert(esp_intr_disable(spihost[host]->intr) == ESP_OK);
-#ifdef CONFIG_PM_ENABLE
-    esp_pm_lock_release(spihost[host]->pm_lock);
-#endif //CONFIG_PM_ENABLE
-
-    // spi_slave_free calls spi_common_periph_free, but this doesn't
-    // free the IO (which seems like a bug). spi_bus_disable does free.
-    spi_bus_disable(host);
-
-    return ESP_OK;
-}
-
-esp_err_t spi_slave_enable(spi_host_device_t host, const spi_bus_config_t *bus_config)
-{
-
-    bool spi_chan_claimed;
-    esp_err_t ret = ESP_OK;
-    esp_err_t err;
-    SPI_CHECK(is_valid_host(host), "invalid host", ESP_ERR_INVALID_ARG);
-    spi_chan_claimed=spicommon_periph_claim(host, "spi slave");
-    SPI_CHECK(spi_chan_claimed, "host already in use", ESP_ERR_INVALID_STATE);
-
-    err = spicommon_bus_initialize_io(host, bus_config, SPICOMMON_BUSFLAG_SLAVE|bus_config->flags, &spihost[host]->flags);
-    if (err!=ESP_OK) {
-        ret = err;
-        goto enable_cleanup;
-    }
-    spi_slave_interface_config_t *slave_config = &spihost[host]->cfg;
-    if (slave_config->spics_io_num >= 0) {
-        spicommon_cs_initialize(host, slave_config->spics_io_num, 0, !bus_is_iomux(spihost[host]));
-        // check and save where cs line really route through
-        spihost[host]->cs_iomux = (slave_config->spics_io_num == spi_periph_signal[host].spics0_iomux_pin) && bus_is_iomux(spihost[host]);
-    }
-
-    // The slave DMA suffers from unexpected transactions. Forbid reading if DMA is enabled by disabling the CS line.
-    if (spihost[host]->dma_enabled) freeze_cs(spihost[host]);
-
-#ifdef CONFIG_PM_ENABLE
-    // Lock APB frequency while SPI slave driver is in use
-    err = esp_pm_lock_acquire(spihost[host]->pm_lock);
-    if (err != ESP_OK) {
-        ret = err;
-        goto enable_cleanup;
-    }
-#endif //CONFIG_PM_ENABLE
-
-
-    spi_slave_hal_context_t *hal = &spihost[host]->hal;
-    //assign the SPI, RX DMA and TX DMA peripheral registers beginning address
-    spi_slave_hal_config_t hal_config = {
-        .host_id = host,
-        .dma_in = SPI_LL_GET_HW(host),
-        .dma_out = SPI_LL_GET_HW(host)
-    };
-    spi_slave_hal_reload(hal, &hal_config);
-    spi_slave_hal_setup_device(hal);
-
-    spi_ll_clear_int_stat(hal->hw);
-    spi_slave_queue_reset(host);
-    xQueueReset(spihost[host]->trans_queue);
-    xQueueReset(spihost[host]->ret_queue);
-    assert(esp_intr_enable(spihost[host]->intr)==ESP_OK);
-
-    return ESP_OK;
-
-enable_cleanup:
-#ifdef CONFIG_PM_ENABLE
-        if (spihost[host]->pm_lock) {
-            esp_pm_lock_release(spihost[host]->pm_lock);
-            esp_pm_lock_delete(spihost[host]->pm_lock);
-        }
-#endif
-    spi_slave_hal_deinit(&spihost[host]->hal);
-    spicommon_periph_free(host);
-
-    return ret;
-
-    
 }
 
 /**
@@ -554,7 +441,6 @@ static void SPI_SLAVE_ISR_ATTR spi_slave_restart_after_dmareset(void *arg)
 }
 #endif  //#if CONFIG_IDF_TARGET_ESP32
 
-//#define PERCEPIO_TRACE_ISR
 //This is run in interrupt context and apart from initialization and destruction, this is the only code
 //touching the host (=spihost[x]) variable. The rest of the data arrives in queues. That is why there are
 //no muxes in this code.
@@ -566,27 +452,7 @@ static void SPI_SLAVE_ISR_ATTR spi_intr(void *arg)
     spi_slave_t *host = (spi_slave_t *)arg;
     spi_slave_hal_context_t *hal = &host->hal;
 
-	#ifdef PERCEPIO_TRACE_ISR
-	#ifdef CONFIG_PERCEPIO_TRACERECORDER_ENABLED
-    static traceString trace_string;
-    if(!trace_string)
-    {
-        trace_string = xTraceRegisterString("SPI Slave ISR");
-    }
-
-    vTracePrint(trace_string, "SPI Slave spi_intr begin");
-    #endif
-    #endif
-
     assert(spi_slave_hal_usr_is_done(hal));
-    if (!spi_slave_hal_usr_is_done(hal)) {
-    	#ifdef PERCEPIO_TRACE_ISR
-    	#ifdef CONFIG_PERCEPIO_TRACERECORDER_ENABLED
-        vTracePrint(trace_string, "SPI Slave spi_intr end");
-        #endif
-        #endif
-        return;
-    }
 
     bool use_dma = host->dma_enabled;
     if (host->cur_trans) {
@@ -605,14 +471,7 @@ static void SPI_SLAVE_ISR_ATTR spi_intr(void *arg)
 #endif  //#if CONFIG_IDF_TARGET_ESP32
 
         if (host->cfg.post_trans_cb) host->cfg.post_trans_cb(host->cur_trans);
-        #ifdef PERCEPIO_TRACE_ISR
-        #ifdef CONFIG_PERCEPIO_TRACERECORDER_ENABLED
-        if(host->cur_trans->trans_len == 0)
-        {
-            vTracePrint(trace_string, "SPI Slave spi_intr trans_len 0");
-        }
-        #endif
-        #endif
+
         if(!(host->cfg.flags & SPI_SLAVE_NO_RETURN_RESULT)) {
             xQueueSendFromISR(host->ret_queue, &host->cur_trans, &do_yield);
         }
@@ -627,11 +486,6 @@ static void SPI_SLAVE_ISR_ATTR spi_intr(void *arg)
         if (spicommon_dmaworkaround_reset_in_progress()) {
             //We need to wait for the reset to complete. Disable int (will be re-enabled on reset callback) and exit isr.
             esp_intr_disable(host->intr);
-            #ifdef PERCEPIO_TRACE_ISR
-            #ifdef CONFIG_PERCEPIO_TRACERECORDER_ENABLED
-            vTracePrint(trace_string, "SPI Slave spi_intr end");
-            #endif
-            #endif
             if (do_yield) portYIELD_FROM_ISR();
             return;
         }
@@ -675,10 +529,5 @@ static void SPI_SLAVE_ISR_ATTR spi_intr(void *arg)
         spi_slave_hal_user_start(hal);
         if (host->cfg.post_setup_cb) host->cfg.post_setup_cb(trans);
     }
-    #ifdef PERCEPIO_TRACE_ISR
-    #ifdef CONFIG_PERCEPIO_TRACERECORDER_ENABLED
-    vTracePrint(trace_string, "SPI Slave spi_intr end");
-    #endif
-    #endif
     if (do_yield) portYIELD_FROM_ISR();
 }
