@@ -1521,9 +1521,23 @@ err:
 
 esp_err_t i2s_channel_start_already_setup(i2s_chan_handle_t handle)
 {
-    xSemaphoreTake(handle->mutex, portMAX_DELAY);
+    if(xPortInIsrContext())
+    {
+        xSemaphoreTakeFromISR(handle->mutex, NULL);
+    }
+    else
+    {
+        xSemaphoreTake(handle->mutex, portMAX_DELAY);
+    }
     handle->state = I2S_CHAN_STATE_RUNNING;
-    xSemaphoreGive(handle->mutex);
+    if(xPortInIsrContext())
+    {
+        xSemaphoreGiveFromISR(handle->mutex, NULL);
+    }
+    else
+    {
+        xSemaphoreGive(handle->mutex);
+    }
 
     /* Give the binary semaphore to enable reading / writing task */
     xSemaphoreGive(handle->binary);
