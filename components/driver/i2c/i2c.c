@@ -194,6 +194,7 @@ typedef struct {
     int intr_alloc_flags;            /*!< Used to allocate the interrupt */
 #endif
     SemaphoreHandle_t cmd_mux;        /*!< semaphore to lock command process */
+    SemaphoreHandle_t op_mux;         /*!< semaphore to lock i2c transaction */
 #ifdef CONFIG_PM_ENABLE
     esp_pm_lock_handle_t pm_lock;
 #endif
@@ -374,6 +375,7 @@ esp_err_t i2c_driver_install(i2c_port_t i2c_num, i2c_mode_t mode, size_t slv_rx_
         {
             //semaphore to sync sending process, because we only have 32 bytes for hardware fifo.
             p_i2c->cmd_mux = xSemaphoreCreateMutex();
+            p_i2c->op_mux = xSemaphoreCreateMutex();
 #ifdef CONFIG_PM_ENABLE
             if (esp_pm_lock_create(ESP_PM_APB_FREQ_MAX, 0, "i2c_driver", &p_i2c->pm_lock) != ESP_OK) {
                 ESP_LOGE(I2C_TAG, I2C_LOCK_ERR_STR);
@@ -387,7 +389,7 @@ esp_err_t i2c_driver_install(i2c_port_t i2c_num, i2c_mode_t mode, size_t slv_rx_
             alloc_caps = I2C_MEM_ALLOC_CAPS_DEFAULT;
 #endif
             p_i2c->cmd_evt_queue = xQueueCreateWithCaps(I2C_EVT_QUEUE_LEN, sizeof(i2c_cmd_evt_t), alloc_caps);
-            if (p_i2c->cmd_mux == NULL || p_i2c->cmd_evt_queue == NULL) {
+            if (p_i2c->cmd_mux == NULL || p_i2c->cmd_evt_queue == NULL || p_i2c->op_mux == NULL) {
                 ESP_LOGE(I2C_TAG, I2C_SEM_ERR_STR);
                 goto err;
             }
@@ -455,6 +457,9 @@ err:
         if (p_i2c_obj[i2c_num]->cmd_mux) {
             vSemaphoreDelete(p_i2c_obj[i2c_num]->cmd_mux);
         }
+        if (p_i2c_obj[i2c_num]->op_mux) {
+            vSemaphoreDelete(p_i2c_obj[i2c_num]->op_mux);
+        }
 #if SOC_I2C_SUPPORT_SLAVE
         if (p_i2c_obj[i2c_num]->slv_rx_mux) {
             vSemaphoreDelete(p_i2c_obj[i2c_num]->slv_rx_mux);
@@ -497,6 +502,9 @@ esp_err_t i2c_driver_delete(i2c_port_t i2c_num)
         xSemaphoreTake(p_i2c->cmd_mux, portMAX_DELAY);
         xSemaphoreGive(p_i2c->cmd_mux);
         vSemaphoreDelete(p_i2c->cmd_mux);
+    }
+    if (p_i2c->op_mux) {
+        vSemaphoreDelete(p_i2c->op_mux);
     }
     if (p_i2c_obj[i2c_num]->cmd_evt_queue) {
         vQueueDeleteWithCaps(p_i2c_obj[i2c_num]->cmd_evt_queue);
@@ -1028,6 +1036,13 @@ esp_err_t i2c_master_write_to_device(i2c_port_t i2c_num, uint8_t device_address,
     esp_err_t err = ESP_OK;
     uint8_t buffer[I2C_TRANS_BUF_MINIMUM_SIZE] = { 0 };
 
+    i2c_obj_t *p_i2c = p_i2c_obj[i2c_num];
+    portBASE_TYPE res = xSemaphoreTake(p_i2c->op_mux, ticks_to_wait);
+    if (res == pdFALSE) {
+        volatile int test = 0;
+        test++;
+        return ESP_ERR_TIMEOUT;
+    }
     i2c_cmd_handle_t handle = i2c_cmd_link_create_static(buffer, sizeof(buffer));
     assert(handle != NULL);
 
@@ -1051,6 +1066,7 @@ esp_err_t i2c_master_write_to_device(i2c_port_t i2c_num, uint8_t device_address,
 
 end:
     i2c_cmd_link_delete_static(handle);
+    xSemaphoreGive(p_i2c->op_mux);
     return err;
 }
 
@@ -1060,6 +1076,12 @@ esp_err_t i2c_master_read_from_device(i2c_port_t i2c_num, uint8_t device_address
 {
     esp_err_t err = ESP_OK;
     uint8_t buffer[I2C_TRANS_BUF_MINIMUM_SIZE] = { 0 };
+
+    i2c_obj_t *p_i2c = p_i2c_obj[i2c_num];
+    portBASE_TYPE res = xSemaphoreTake(p_i2c->op_mux, ticks_to_wait);
+    if (res == pdFALSE) {
+        return ESP_ERR_TIMEOUT;
+    }
 
     i2c_cmd_handle_t handle = i2c_cmd_link_create_static(buffer, sizeof(buffer));
     assert(handle != NULL);
@@ -1084,6 +1106,7 @@ esp_err_t i2c_master_read_from_device(i2c_port_t i2c_num, uint8_t device_address
 
 end:
     i2c_cmd_link_delete_static(handle);
+    xSemaphoreGive(p_i2c->op_mux);
     return err;
 }
 
@@ -1095,6 +1118,12 @@ esp_err_t i2c_master_write_read_device(i2c_port_t i2c_num, uint8_t device_addres
     esp_err_t err = ESP_OK;
     uint8_t buffer[I2C_TRANS_BUF_MINIMUM_SIZE] = { 0 };
 
+    i2c_obj_t *p_i2c = p_i2c_obj[i2c_num];
+    portBASE_TYPE res = xSemaphoreTake(p_i2c->op_mux, ticks_to_wait);
+    if (res == pdFALSE) {
+        return ESP_ERR_TIMEOUT;
+    }
+
     i2c_cmd_handle_t handle = i2c_cmd_link_create_static(buffer, sizeof(buffer));
     assert(handle != NULL);
 
@@ -1133,6 +1162,7 @@ esp_err_t i2c_master_write_read_device(i2c_port_t i2c_num, uint8_t device_addres
 
 end:
     i2c_cmd_link_delete_static(handle);
+    xSemaphoreGive(p_i2c->op_mux);
     return err;
 }
 
