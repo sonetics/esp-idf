@@ -211,6 +211,24 @@ void esp_log_write(esp_log_level_t level,
     va_end(list);
 }
 
+void esp_log_write_default(esp_log_level_t level, const char *tag, const char *format, ...)
+{
+    va_list list;
+    va_start(list, format);
+
+    if (!esp_log_impl_lock_timeout()) {
+        return;
+    }
+    esp_log_level_t level_for_tag = s_log_level_get_and_unlock(tag);
+    if (!should_output(level, level_for_tag)) {
+        return;
+    }
+
+    vprintf(format, list);
+
+    va_end(list);
+}
+
 static inline bool get_cached_log_level(const char *tag, esp_log_level_t *level)
 {
     // Look for `tag` in cache
