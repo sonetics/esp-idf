@@ -22,7 +22,14 @@ static inline bool esp_ptr_byte_accessible(const void* ptr) {
 //print number of bytes per line for esp_log_buffer_char and esp_log_buffer_hex
 #define BYTES_PER_LINE 16
 
-void esp_log_buffer_hex_internal(const char *tag, const void *buffer, uint16_t buff_len,
+static esp_log_buffer_cb_fn cb = NULL;
+
+void esp_log_buffer_set_cb(esp_log_buffer_cb_fn callback)
+{
+    cb = callback;
+}
+
+void esp_log_buffer_hex_internal_printout(const char *tag, const void *buffer, uint16_t buff_len,
                                  esp_log_level_t log_level)
 {
     if (buff_len == 0) {
@@ -50,13 +57,13 @@ void esp_log_buffer_hex_internal(const char *tag, const void *buffer, uint16_t b
         for (int i = 0; i < bytes_cur_line; i ++) {
             sprintf(hex_buffer + 3 * i, "%02x ", (unsigned char) ptr_line[i]);
         }
-        ESP_LOG_LEVEL(log_level, tag, "%s", hex_buffer);
+        ESP_LOG_LEVEL_DEFAULT(log_level, tag, "%s", hex_buffer);
         buffer += bytes_cur_line;
         buff_len -= bytes_cur_line;
     } while (buff_len);
 }
 
-void esp_log_buffer_char_internal(const char *tag, const void *buffer, uint16_t buff_len,
+void esp_log_buffer_char_internal_printout(const char *tag, const void *buffer, uint16_t buff_len,
                                   esp_log_level_t log_level)
 {
     if (buff_len == 0) {
@@ -84,13 +91,13 @@ void esp_log_buffer_char_internal(const char *tag, const void *buffer, uint16_t 
         for (int i = 0; i < bytes_cur_line; i ++) {
             sprintf(char_buffer + i, "%c", ptr_line[i]);
         }
-        ESP_LOG_LEVEL(log_level, tag, "%s", char_buffer);
+        ESP_LOG_LEVEL_DEFAULT(log_level, tag, "%s", char_buffer);
         buffer += bytes_cur_line;
         buff_len -= bytes_cur_line;
     } while (buff_len);
 }
 
-void esp_log_buffer_hexdump_internal(const char *tag, const void *buffer, uint16_t buff_len, esp_log_level_t log_level)
+void esp_log_buffer_hexdump_internal_printout(const char *tag, const void *buffer, uint16_t buff_len, esp_log_level_t log_level)
 {
 
     if (buff_len == 0) {
@@ -140,8 +147,38 @@ void esp_log_buffer_hexdump_internal(const char *tag, const void *buffer, uint16
         }
         ptr_hd += sprintf(ptr_hd, "|");
 
-        ESP_LOG_LEVEL(log_level, tag, "%s", hd_buffer);
+        ESP_LOG_LEVEL_DEFAULT(log_level, tag, "%s", hd_buffer);
         buffer += bytes_cur_line;
         buff_len -= bytes_cur_line;
     } while (buff_len);
 }
+
+void esp_log_buffer_hex_internal(const char *tag, const void *buffer, uint16_t buff_len,
+                                 esp_log_level_t log_level)
+{
+    if (cb) {
+        cb(tag, buffer, buff_len, log_level, esp_log_buffer_hex_internal_printout);
+    } else {
+        esp_log_buffer_hex_internal_printout(tag, buffer, buff_len, log_level);
+    }
+}
+
+void esp_log_buffer_char_internal(const char *tag, const void *buffer, uint16_t buff_len,
+                                  esp_log_level_t log_level)
+{
+    if (cb) {
+        cb(tag, buffer, buff_len, log_level, esp_log_buffer_char_internal_printout);
+    } else {
+        esp_log_buffer_char_internal_printout(tag, buffer, buff_len, log_level);
+    }
+}
+
+void esp_log_buffer_hexdump_internal(const char *tag, const void *buffer, uint16_t buff_len, esp_log_level_t log_level)
+{
+    if (cb) {
+        cb(tag, buffer, buff_len, log_level, esp_log_buffer_hexdump_internal_printout);
+    } else {
+        esp_log_buffer_hexdump_internal_printout(tag, buffer, buff_len, log_level);
+    }
+}
+
