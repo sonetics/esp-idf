@@ -998,10 +998,6 @@ esp_err_t i2c_master_write_to_device(i2c_port_t i2c_num, uint8_t device_address,
     uint8_t buffer[I2C_TRANS_BUF_MINIMUM_SIZE] = { 0 };
 
     i2c_obj_t *p_i2c = p_i2c_obj[i2c_num];
-    portBASE_TYPE res = xSemaphoreTake(p_i2c->op_mux, ticks_to_wait);
-    if (res == pdFALSE) {
-        return ESP_ERR_TIMEOUT;
-    }
     i2c_cmd_handle_t handle = i2c_cmd_link_create_static(buffer, sizeof(buffer));
     assert (handle != NULL);
 
@@ -1025,7 +1021,6 @@ esp_err_t i2c_master_write_to_device(i2c_port_t i2c_num, uint8_t device_address,
 
 end:
     i2c_cmd_link_delete_static(handle);
-    xSemaphoreGive(p_i2c->op_mux);
     return err;
 }
 
@@ -1038,10 +1033,6 @@ esp_err_t i2c_master_read_from_device(i2c_port_t i2c_num, uint8_t device_address
     uint8_t buffer[I2C_TRANS_BUF_MINIMUM_SIZE] = { 0 };
 
     i2c_obj_t *p_i2c = p_i2c_obj[i2c_num];
-    portBASE_TYPE res = xSemaphoreTake(p_i2c->op_mux, ticks_to_wait);
-    if (res == pdFALSE) {
-        return ESP_ERR_TIMEOUT;
-    }
 
     i2c_cmd_handle_t handle = i2c_cmd_link_create_static(buffer, sizeof(buffer));
     assert (handle != NULL);
@@ -1066,7 +1057,6 @@ esp_err_t i2c_master_read_from_device(i2c_port_t i2c_num, uint8_t device_address
 
 end:
     i2c_cmd_link_delete_static(handle);
-    xSemaphoreGive(p_i2c->op_mux);
     return err;
 }
 
@@ -1080,10 +1070,6 @@ esp_err_t i2c_master_write_read_device(i2c_port_t i2c_num, uint8_t device_addres
     uint8_t buffer[I2C_TRANS_BUF_MINIMUM_SIZE] = { 0 };
 
     i2c_obj_t *p_i2c = p_i2c_obj[i2c_num];
-    portBASE_TYPE res = xSemaphoreTake(p_i2c->op_mux, ticks_to_wait);
-    if (res == pdFALSE) {
-        return ESP_ERR_TIMEOUT;
-    }
 
     i2c_cmd_handle_t handle = i2c_cmd_link_create_static(buffer, sizeof(buffer));
     assert (handle != NULL);
@@ -1123,7 +1109,6 @@ esp_err_t i2c_master_write_read_device(i2c_port_t i2c_num, uint8_t device_addres
 
 end:
     i2c_cmd_link_delete_static(handle);
-    xSemaphoreGive(p_i2c->op_mux);
     return err;
 }
 
@@ -1518,6 +1503,10 @@ esp_err_t i2c_master_cmd_begin(i2c_port_t i2c_num, i2c_cmd_handle_t cmd_handle, 
     ESP_RETURN_ON_FALSE(p_i2c_obj[i2c_num] != NULL, ESP_ERR_INVALID_STATE, I2C_TAG, I2C_DRIVER_NOT_INSTALL_ERR_STR);
     ESP_RETURN_ON_FALSE(p_i2c_obj[i2c_num]->mode == I2C_MODE_MASTER, ESP_ERR_INVALID_STATE, I2C_TAG, I2C_MASTER_MODE_ERR_STR);
     ESP_RETURN_ON_FALSE(cmd_handle != NULL, ESP_ERR_INVALID_ARG, I2C_TAG, I2C_CMD_LINK_INIT_ERR_STR);
+    ESP_RETURN_ON_FALSE(p_i2c_obj[i2c_num]->cmd_mux != NULL, ESP_ERR_INVALID_STATE, I2C_TAG, I2C_DRIVER_NOT_INSTALL_ERR_STR);
+
+    portBASE_TYPE res;
+
 
 #if CONFIG_SPIRAM_USE_MALLOC
     //If the i2c read or write buffer is not in internal RAM, we will return ESP_FAIL
@@ -1532,7 +1521,15 @@ esp_err_t i2c_master_cmd_begin(i2c_port_t i2c_num, i2c_cmd_handle_t cmd_handle, 
     esp_err_t ret = ESP_FAIL;
     i2c_obj_t *p_i2c = p_i2c_obj[i2c_num];
     const TickType_t ticks_start = xTaskGetTickCount();
-    portBASE_TYPE res = xSemaphoreTake(p_i2c->cmd_mux, ticks_to_wait);
+
+    // Wait for i2c bus mutex
+    res = xSemaphoreTake(p_i2c->op_mux, ticks_to_wait);
+    if (res == pdFALSE) {
+        return ESP_ERR_TIMEOUT;
+    }
+
+    // TickType_t ticks_start = xTaskGetTickCount();
+    res = xSemaphoreTake(p_i2c->cmd_mux, ticks_to_wait);
     if (res == pdFALSE) {
         return ESP_ERR_TIMEOUT;
     }
@@ -1620,6 +1617,7 @@ esp_err_t i2c_master_cmd_begin(i2c_port_t i2c_num, i2c_cmd_handle_t cmd_handle, 
 #ifdef CONFIG_PM_ENABLE
     esp_pm_lock_release(p_i2c->pm_lock);
 #endif
+    xSemaphoreGive(p_i2c->op_mux);
     xSemaphoreGive(p_i2c->cmd_mux);
     return ret;
 }
