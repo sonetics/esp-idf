@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2019-2021 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2019-2024 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -7,7 +7,9 @@
 #include <string.h>
 #include <esp_log.h>
 #include <esp_err.h>
+#ifdef CONFIG_BT_CONTROLLER_ENABLED
 #include "esp_bt.h"
+#endif
 
 #include <protocomm.h>
 #include <protocomm_ble.h>
@@ -20,7 +22,7 @@ static const char *TAG = "wifi_prov_scheme_ble";
 extern const wifi_prov_scheme_t wifi_prov_scheme_ble;
 
 static uint8_t *custom_service_uuid;
-
+static uint8_t *custom_ble_addr;
 static uint8_t *custom_manufacturer_data;
 static size_t custom_manufacturer_data_len;
 
@@ -54,6 +56,22 @@ static esp_err_t prov_start(protocomm_t *pc, void *config)
         ESP_LOGE(TAG, "Failed to start protocomm BLE service");
         return ESP_FAIL;
     }
+    return ESP_OK;
+}
+
+esp_err_t wifi_prov_scheme_ble_set_random_addr(const uint8_t *addr)
+{
+    if (!addr) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    custom_ble_addr = (uint8_t *) malloc(BLE_ADDR_LEN);
+    if (custom_ble_addr == NULL) {
+         ESP_LOGE(TAG, "Error allocating memory for random address");
+         return ESP_ERR_NO_MEM;
+    }
+
+    memcpy(custom_ble_addr, addr, BLE_ADDR_LEN);
     return ESP_OK;
 }
 
@@ -157,6 +175,12 @@ static esp_err_t set_config_service(void *config, const char *service_name, cons
         ble_config->manufacturer_data_len = 0;
     }
 
+    if (custom_ble_addr){
+        ble_config->ble_addr = custom_ble_addr;
+    } else {
+        ble_config->ble_addr = NULL;
+    }
+
     return ESP_OK;
 }
 
@@ -197,9 +221,12 @@ static esp_err_t set_config_endpoint(void *config, const char *endpoint_name, ui
 /* Used when both BT and BLE are not needed by application */
 void wifi_prov_scheme_ble_event_cb_free_btdm(void *user_data, wifi_prov_cb_event_t event, void *event_data)
 {
+#ifdef CONFIG_BT_CONTROLLER_ENABLED
     esp_err_t err;
+#endif
     switch (event) {
         case WIFI_PROV_INIT:
+#ifdef CONFIG_BT_CONTROLLER_ENABLED
             /* Release BT memory, as we need only BLE */
             err = esp_bt_mem_release(ESP_BT_MODE_CLASSIC_BT);
             if (err != ESP_OK) {
@@ -207,10 +234,12 @@ void wifi_prov_scheme_ble_event_cb_free_btdm(void *user_data, wifi_prov_cb_event
             } else {
                 ESP_LOGI(TAG, "BT memory released");
             }
+#endif
             break;
 
         case WIFI_PROV_DEINIT:
 #ifndef CONFIG_WIFI_PROV_KEEP_BLE_ON_AFTER_PROV
+#ifdef CONFIG_BT_CONTROLLER_ENABLED
             /* Release memory used by BLE and Bluedroid host stack */
             err = esp_bt_mem_release(ESP_BT_MODE_BTDM);
             if (err != ESP_OK) {
@@ -218,6 +247,7 @@ void wifi_prov_scheme_ble_event_cb_free_btdm(void *user_data, wifi_prov_cb_event
             } else {
                 ESP_LOGI(TAG, "BTDM memory released");
             }
+#endif
 #endif
             break;
 
@@ -229,9 +259,12 @@ void wifi_prov_scheme_ble_event_cb_free_btdm(void *user_data, wifi_prov_cb_event
 /* Used when BT is not needed by application */
 void wifi_prov_scheme_ble_event_cb_free_bt(void *user_data, wifi_prov_cb_event_t event, void *event_data)
 {
+#ifdef CONFIG_BT_CONTROLLER_ENABLED
     esp_err_t err;
+#endif
     switch (event) {
         case WIFI_PROV_INIT:
+#ifdef CONFIG_BT_CONTROLLER_ENABLED
             /* Release BT memory, as we need only BLE */
             err = esp_bt_mem_release(ESP_BT_MODE_CLASSIC_BT);
             if (err != ESP_OK) {
@@ -239,6 +272,7 @@ void wifi_prov_scheme_ble_event_cb_free_bt(void *user_data, wifi_prov_cb_event_t
             } else {
                 ESP_LOGI(TAG, "BT memory released");
             }
+#endif
             break;
 
         default:
@@ -249,10 +283,13 @@ void wifi_prov_scheme_ble_event_cb_free_bt(void *user_data, wifi_prov_cb_event_t
 /* Used when BLE is not needed by application */
 void wifi_prov_scheme_ble_event_cb_free_ble(void *user_data, wifi_prov_cb_event_t event, void *event_data)
 {
+#ifdef CONFIG_BT_CONTROLLER_ENABLED
     esp_err_t err;
+#endif
     switch (event) {
         case WIFI_PROV_DEINIT:
 #ifndef CONFIG_WIFI_PROV_KEEP_BLE_ON_AFTER_PROV
+#ifdef CONFIG_BT_CONTROLLER_ENABLED
             /* Release memory used by BLE stack */
             err = esp_bt_mem_release(ESP_BT_MODE_BLE);
             if (err != ESP_OK) {
@@ -260,6 +297,7 @@ void wifi_prov_scheme_ble_event_cb_free_ble(void *user_data, wifi_prov_cb_event_
             } else {
                 ESP_LOGI(TAG, "BLE memory released");
             }
+#endif
 #endif
             break;
 

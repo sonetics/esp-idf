@@ -10,9 +10,8 @@ from pytest_embedded_idf import IdfDut
 
 @pytest.mark.esp32
 @pytest.mark.jtag
-@pytest.mark.parametrize('embedded_services', [
-    'esp,idf,jtag',
-], indirect=True)
+@pytest.mark.parametrize('config', ['app_trace_jtag'], indirect=True)
+@pytest.mark.parametrize('embedded_services', ['esp,idf,jtag'], indirect=True)
 def test_examples_sysview_tracing_heap_log(idf_path: str, dut: IdfDut) -> None:
     trace_log = os.path.join(os.path.dirname(dut.gdb._logfile), 'heap_log.svdat')  # pylint: disable=protected-access
 
@@ -30,7 +29,7 @@ def test_examples_sysview_tracing_heap_log(idf_path: str, dut: IdfDut) -> None:
     dut.gdb.write('mon esp sysview stop', non_blocking=True)
     dut.gdb.write('end')
 
-    dut.gdb.write('c')
+    dut.gdb.write('c', non_blocking=True)
     dut.expect('esp_apptrace: Initialized TRAX on CPU0')
 
     time.sleep(1)  # make sure that the sysview file has been generated

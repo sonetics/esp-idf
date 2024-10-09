@@ -135,10 +135,10 @@ test_idf_tools:
     entrypoint: [""]  # use system python3. no extra pip package installed
   script:
     # Tools must be downloaded for testing
-    - python3 ${IDF_PATH}/tools/idf_tools.py download
+    - python3 ${IDF_PATH}/tools/idf_tools.py download required qemu-riscv32 qemu-xtensa
     - cd ${IDF_PATH}/tools/test_idf_tools
     - python3 -m pip install jsonschema
-    - python3 ./test_idf_tools.py
+    - python3 ./test_idf_tools.py -v
     - python3 ./test_idf_tools_python_env.py
 
 .test_efuse_table_on_host_template:
@@ -222,14 +222,6 @@ test_mkuf2:
   script:
     - cd ${IDF_PATH}/tools/test_mkuf2
     - ./test_mkuf2.py
-
-test_sbom:
-  extends:
-    - .host_test_template
-    - .rules:patterns:sbom
-  script:
-    - cd ${IDF_PATH}/tools/test_sbom
-    - pytest
 
 test_autocomplete:
   extends:
@@ -315,7 +307,7 @@ test_pytest_qemu:
     when: always
     paths:
       - XUNIT_RESULT.xml
-      - pytest_embedded_log/
+      - pytest-embedded/
     reports:
       junit: XUNIT_RESULT.xml
     expire_in: 1 week
@@ -324,13 +316,13 @@ test_pytest_qemu:
       --target esp32
       --pytest-apps
       -m qemu
-    - retry_failed git clone $KNOWN_FAILURE_CASES_REPO known_failure_cases
+    - python tools/ci/get_known_failure_cases_file.py
     - pytest
       --target esp32
       -m qemu
       --embedded-services idf,qemu
       --junitxml=XUNIT_RESULT.xml
-      --known-failure-cases-file known_failure_cases/known_failure_cases.txt
+      --known-failure-cases-file ${KNOWN_FAILURE_CASES_FILE_NAME}
 
 test_pytest_linux:
   extends:
@@ -340,7 +332,7 @@ test_pytest_linux:
     when: always
     paths:
       - XUNIT_RESULT.xml
-      - pytest_embedded_log/
+      - pytest-embedded/
     reports:
       junit: XUNIT_RESULT.xml
     expire_in: 1 week
@@ -349,6 +341,6 @@ test_pytest_linux:
       --target linux
       --pytest-apps
       -m host_test
-    - retry_failed git clone $KNOWN_FAILURE_CASES_REPO known_failure_cases
+    - python tools/ci/get_known_failure_cases_file.py
     - run_cmd pytest --target linux -m host_test --junitxml=XUNIT_RESULT.xml
-      --known-failure-cases-file known_failure_cases/known_failure_cases.txt
+      --known-failure-cases-file ${KNOWN_FAILURE_CASES_FILE_NAME}

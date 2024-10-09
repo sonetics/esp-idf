@@ -84,6 +84,7 @@ void btm_init (void)
 #if BLE_INCLUDED == TRUE
     btm_ble_lock_init();
     btm_ble_sem_init();
+    btm_cb.addr_res_en = TRUE;
 #endif
     btm_sec_dev_init();
 #if (BLE_50_FEATURE_SUPPORT == TRUE)
@@ -115,5 +116,28 @@ void btm_free(void)
 #if BLE_INCLUDED == TRUE
     btm_ble_lock_free();
     btm_ble_sem_free();
+#endif
+}
+
+uint8_t btm_acl_active_count(void)
+{
+    list_node_t *p_node = NULL;
+    tACL_CONN *p_acl_conn = NULL;
+    uint8_t count = 0;
+
+    for (p_node = list_begin(btm_cb.p_acl_db_list); p_node; p_node = list_next(p_node)) {
+        p_acl_conn = list_node(p_node);
+        if (p_acl_conn && p_acl_conn->in_use) {
+            count++;
+        }
+    }
+
+    return count;
+}
+
+void btm_ble_addr_resolve_enable(bool enable)
+{
+#if (BLE_INCLUDED == TRUE)
+    btm_cb.addr_res_en = enable;
 #endif
 }

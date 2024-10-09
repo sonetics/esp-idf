@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2021-2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2021-2024 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Unlicense OR CC0-1.0
  */
@@ -30,7 +30,6 @@
 #define BT_RC_CT_TAG          "RC_CT"
 
 /* device name */
-#define TARGET_DEVICE_NAME    "ESP_SPEAKER"
 #define LOCAL_DEVICE_NAME     "ESP_A2DP_SRC"
 
 /* AVRCP used transaction label */
@@ -111,6 +110,8 @@ static int s_connecting_intv = 0;                             /* count of heart 
 static uint32_t s_pkt_cnt = 0;                                /* count of packets */
 static esp_avrc_rn_evt_cap_mask_t s_avrc_peer_rn_cap;         /* AVRC target notification event capability bit mask */
 static TimerHandle_t s_tmr;                                   /* handle of heart beat timer */
+
+static const char remote_device_name[] = CONFIG_EXAMPLE_PEER_DEVICE_NAME;
 
 /*********************************
  * STATIC FUNCTION DEFINITIONS
@@ -199,7 +200,7 @@ static void filter_inquiry_scan_result(esp_bt_gap_cb_param_t *param)
     /* search for target device in its Extended Inqury Response */
     if (eir) {
         get_name_from_eir(eir, s_peer_bdname, NULL);
-        if (strcmp((char *)s_peer_bdname, TARGET_DEVICE_NAME) == 0) {
+        if (strcmp((char *)s_peer_bdname, remote_device_name) == 0) {
             ESP_LOGI(BT_AV_TAG, "Found a target device, address %s, name %s", bda_str, s_peer_bdname);
             s_a2d_state = APP_AV_STATE_DISCOVERED;
             memcpy(s_peer_bda, param->disc_res.bda, ESP_BD_ADDR_LEN);
@@ -727,6 +728,7 @@ static void bt_av_hdl_avrc_ct_evt(uint16_t event, void *p_param)
 
 void app_main(void)
 {
+    char bda_str[18] = {0};
     /* initialize NVS — it is used to store PHY calibration data */
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -774,6 +776,7 @@ void app_main(void)
     esp_bt_pin_code_t pin_code;
     esp_bt_gap_set_pin(pin_type, 0, pin_code);
 
+    ESP_LOGI(BT_AV_TAG, "Own address:[%s]", bda2str((uint8_t *)esp_bt_dev_get_address(), bda_str, sizeof(bda_str)));
     bt_app_task_start_up();
     /* Bluetooth device name, connection mode and profile set up */
     bt_app_work_dispatch(bt_av_hdl_stack_evt, BT_APP_STACK_UP_EVT, NULL, 0, NULL);

@@ -60,6 +60,10 @@ The above command explained:
 - ``espressif/idf``: uses Docker image ``espressif/idf`` with tag ``latest`` (implicitly added by Docker when no tag is specified)
 - ``idf.py build``: runs this command inside the container
 
+.. note::
+
+   When the mounted directory, ``/project``, contains a git repository owned by a different user (``UID``) than the one running the Docker container, git commands executed within ``/project`` might fail, displaying an error message ``fatal: detected dubious ownership in repository at '/project'``. To resolve this issue, you can designate the ``/project`` directory as safe by setting the IDF_GIT_SAFE_DIR environment variable during the Docker container startup. For instance, you can achieve this by including ``-e IDF_GIT_SAFE_DIR='/project'`` as a parameter. Additionally, multiple directories can be specified by using a ``:`` separator. To entirely disable this git security check, ``*`` can be used.
+
 To build with a specific Docker image tag, specify it as ``espressif/idf:TAG``, for example::
 
     docker run --rm -v $PWD:/project -w /project espressif/idf:release-v4.4 idf.py build
@@ -116,11 +120,12 @@ Building custom images
 
 The Dockerfile in ESP-IDF repository provides several build arguments which can be used to customize the Docker image:
 
-- ``IDF_CLONE_URL``: URL of the repository to clone ESP-IDF from. Can be set to a custom URL when working with a fork of ESP-IDF. Default is ``https://github.com/espressif/esp-idf.git``.
-- ``IDF_CLONE_BRANCH_OR_TAG``: Name of a git branch or tag use when cloning ESP-IDF. This value is passed to ``git clone`` command using the ``--branch`` argument. Default is ``master``.
-- ``IDF_CHECKOUT_REF``: If this argument is set to a non-empty value, ``git checkout $IDF_CHECKOUT_REF`` command will be performed after cloning. This argument can be set to the SHA of the specific commit to check out, for example if some specific commit on a release branch is desired.
-- ``IDF_CLONE_SHALLOW``: If this argument is set to a non-empty value, ``--depth=1 --shallow-submodules`` arguments will be used when performing ``git clone``. This significantly reduces the amount of data downloaded and the size of the resulting Docker image. However, if switching to a different branch in such a "shallow" repository is necessary, an additional ``git fetch origin <branch>`` command must be executed first.
-- ``IDF_INSTALL_TARGETS``: Comma-separated list of IDF targets to install toolchains for, or ``all`` to install toolchains for all targets. Selecting specific targets reduces the amount of data downloaded and the size of the resulting Docker image. Default is ``all``.
+- ``IDF_CLONE_URL``: URL of the repository to clone ESP-IDF from. Can be set to a custom URL when working with a fork of ESP-IDF. The default is ``https://github.com/espressif/esp-idf.git``.
+- ``IDF_CLONE_BRANCH_OR_TAG``: Name of a git branch or tag used when cloning ESP-IDF. This value is passed to the ``git clone`` command using the ``--branch`` argument. The default is ``master``.
+- ``IDF_CHECKOUT_REF``: If this argument is set to a non-empty value, ``git checkout $IDF_CHECKOUT_REF`` command performs after cloning. This argument can be set to the SHA of the specific commit to check out, for example, if some specific commit on a release branch is desired.
+- ``IDF_CLONE_SHALLOW``: If this argument is set to a non-empty value, ``--depth=1 --shallow-submodules`` arguments are used when performing ``git clone``. Depth can be customized using ``IDF_CLONE_SHALLOW_DEPTH``. Doing a shallow clone significantly reduces the amount of data downloaded and the size of the resulting Docker image. However, if switching to a different branch in such a "shallow" repository is necessary, an additional ``git fetch origin <branch>`` command must be executed first.
+- ``IDF_CLONE_SHALLOW_DEPTH``: This argument specifies the depth value to use when doing a shallow clone. If not set, ``--depth=1`` will be used. This argument has effect only if ``IDF_CLONE_SHALLOW`` is used. Use this argument if you are building a Docker image for a branch, and the image has to contain the latest tag on that branch. To determine the required depth, run ``git describe`` for the given branch and note the offset number. Increment it by 1, then use it as the value of this argument. The resulting image will contain the latest tag on the branch, and consequently ``git describe`` command inside the Docker image will work as expected.
+- ``IDF_INSTALL_TARGETS``: Comma-separated list of ESP-IDF targets to install toolchains for, or ``all`` to install toolchains for all targets. Selecting specific targets reduces the amount of data downloaded and the size of the resulting Docker image. The default is ``all``.
 
 To use these arguments, pass them via the ``--build-arg`` command line option. For example, the following command will build a Docker image with a shallow clone of ESP-IDF v4.4.1 and tools for ESP32-C3, only::
 

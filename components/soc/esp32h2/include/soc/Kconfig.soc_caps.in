@@ -115,6 +115,10 @@ config SOC_SYSTIMER_SUPPORTED
     bool
     default y
 
+config SOC_SUPPORT_COEXISTENCE
+    bool
+    default y
+
 config SOC_AES_SUPPORTED
     bool
     default y
@@ -281,7 +285,15 @@ config SOC_ADC_RTC_MAX_BITWIDTH
 
 config SOC_ADC_CALIBRATION_V1_SUPPORTED
     bool
-    default n
+    default y
+
+config SOC_ADC_SELF_HW_CALI_SUPPORTED
+    bool
+    default y
+
+config SOC_ADC_CALIB_CHAN_COMPENS_SUPPORTED
+    bool
+    default y
 
 config SOC_ADC_TEMPERATURE_SHARE_INTR
     bool
@@ -327,7 +339,7 @@ config SOC_CPU_WATCHPOINTS_NUM
     int
     default 4
 
-config SOC_CPU_WATCHPOINT_SIZE
+config SOC_CPU_WATCHPOINT_MAX_REGION_SIZE
     hex
     default 0x80000000
 
@@ -410,14 +422,6 @@ config SOC_GPIO_FLEX_GLITCH_FILTER_NUM
 config SOC_GPIO_SUPPORT_ETM
     bool
     default y
-
-config SOC_GPIO_ETM_EVENTS_PER_GROUP
-    int
-    default 8
-
-config SOC_GPIO_ETM_TASKS_PER_GROUP
-    int
-    default 8
 
 config SOC_GPIO_SUPPORT_RTC_INDEPENDENT
     bool
@@ -1003,6 +1007,10 @@ config SOC_EFUSE_BLOCK9_KEY_PURPOSE_QUIRK
     bool
     default y
 
+config SOC_EFUSE_ECDSA_USE_HARDWARE_K
+    bool
+    default y
+
 config SOC_SECURE_BOOT_V2_RSA
     bool
     default y
@@ -1091,6 +1099,10 @@ config SOC_PM_SUPPORT_EXT1_WAKEUP
     bool
     default y
 
+config SOC_PM_SUPPORT_EXT1_WAKEUP_MODE_PER_PIN
+    bool
+    default y
+
 config SOC_PM_SUPPORT_CPU_PD
     bool
     default y
@@ -1135,7 +1147,7 @@ config SOC_PM_SUPPORT_DEEPSLEEP_CHECK_STUB_ONLY
     bool
     default y
 
-config SOC_PM_RETENTION_HAS_REGDMA_POWER_BUG
+config SOC_PM_RETENTION_SW_TRIGGER_REGDMA
     bool
     default y
 
@@ -1200,5 +1212,9 @@ config SOC_BLE_POWER_CONTROL_SUPPORTED
     default y
 
 config SOC_BLE_MULTI_CONN_OPTIMIZATION
+    bool
+    default y
+
+config SOC_BLE_PERIODIC_ADV_ENH_SUPPORTED
     bool
     default y

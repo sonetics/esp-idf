@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2023 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2024 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -28,6 +28,7 @@
 #include "sdkconfig.h"
 #include "esp_rom_gpio.h"
 #include "clk_ctrl_os.h"
+#include "esp_pm.h"
 
 #ifdef CONFIG_UART_ISR_IN_IRAM
 #define UART_ISR_ATTR     IRAM_ATTR
@@ -36,6 +37,14 @@
 #define UART_ISR_ATTR
 #define UART_MALLOC_CAPS  MALLOC_CAP_DEFAULT
 #endif
+
+// Whether to use the APB_MAX lock.
+// Requirement of each chip, to keep sending:
+// - ESP32, S2, C3, S3: Protect APB, which is the core clock and clock of UART FIFO
+// - ESP32-C2: Protect APB (UART FIFO clock), core clock (TODO: IDF-8348)
+// - ESP32-C6, H2 and later chips: Protect core clock. Run in light-sleep hasn't been developed yet (TODO: IDF-8349),
+//   also need to avoid auto light-sleep.
+#define PROTECT_APB     (CONFIG_PM_ENABLE)
 
 #define XOFF (0x13)
 #define XON (0x11)
@@ -109,9 +118,6 @@ typedef struct {
     int rx_buffered_len;                /*!< UART cached data length */
     int rx_buf_size;                    /*!< RX ring buffer size */
     bool rx_buffer_full_flg;            /*!< RX ring buffer full flag. */
-    uint32_t rx_cur_remain;             /*!< Data number that waiting to be read out in ring buffer item*/
-    uint8_t *rx_ptr;                    /*!< pointer to the current data in ring buffer*/
-    uint8_t *rx_head_ptr;               /*!< pointer to the head of RX item*/
     uint8_t rx_data_buf[SOC_UART_FIFO_LEN]; /*!< Data buffer to stash FIFO data*/
     uint8_t rx_stash_len;               /*!< stashed data length.(When using flow control, after reading out FIFO data, if we fail to push to buffer, we can just stash them.) */
     uint32_t rx_int_usr_mask;           /*!< RX interrupt status. Valid at any time, regardless of RX buffer status. */
@@ -146,6 +152,9 @@ typedef struct {
     void *tx_fifo_sem_struct;
     void *tx_done_sem_struct;
     void *tx_brk_sem_struct;
+#endif
+#if PROTECT_APB
+    esp_pm_lock_handle_t pm_lock;   ///< Power management lock
 #endif
 } uart_obj_t;
 
@@ -1144,15 +1153,19 @@ esp_err_t uart_wait_tx_done(uart_port_t uart_num, TickType_t ticks_to_wait)
     } else {
         ticks_to_wait = ticks_to_wait - (ticks_end - ticks_start);
     }
+
+#if PROTECT_APB
+    esp_pm_lock_acquire(p_uart_obj[uart_num]->pm_lock);
+#endif
     //take 2nd tx_done_sem, wait given from ISR
     res = xSemaphoreTake(p_uart_obj[uart_num]->tx_done_sem, (TickType_t)ticks_to_wait);
-    if (res == pdFALSE) {
-        // The TX_DONE interrupt will be disabled in ISR
-        xSemaphoreGive(p_uart_obj[uart_num]->tx_mux);
-        return ESP_ERR_TIMEOUT;
-    }
+#if PROTECT_APB
+    esp_pm_lock_release(p_uart_obj[uart_num]->pm_lock);
+#endif
+
+    // The TX_DONE interrupt will be disabled in ISR
     xSemaphoreGive(p_uart_obj[uart_num]->tx_mux);
-    return ESP_OK;
+    return (res == pdFALSE) ? ESP_ERR_TIMEOUT : ESP_OK;
 }
 
 int uart_tx_chars(uart_port_t uart_num, const char *buffer, uint32_t len)
@@ -1179,6 +1192,9 @@ static int uart_tx_all(uart_port_t uart_num, const char *src, size_t size, bool 
 
     //lock for uart_tx
     xSemaphoreTake(p_uart_obj[uart_num]->tx_mux, (TickType_t)portMAX_DELAY);
+#if PROTECT_APB
+    esp_pm_lock_acquire(p_uart_obj[uart_num]->pm_lock);
+#endif
     p_uart_obj[uart_num]->coll_det_flg = false;
     if (p_uart_obj[uart_num]->tx_buf_size > 0) {
         size_t max_size = xRingbufferGetMaxItemSize(p_uart_obj[uart_num]->tx_ring_buf);
@@ -1222,6 +1238,9 @@ static int uart_tx_all(uart_port_t uart_num, const char *src, size_t size, bool 
         }
         xSemaphoreGive(p_uart_obj[uart_num]->tx_fifo_sem);
     }
+#if PROTECT_APB
+    esp_pm_lock_release(p_uart_obj[uart_num]->pm_lock);
+#endif
     xSemaphoreGive(p_uart_obj[uart_num]->tx_mux);
     return original_size;
 }
@@ -1247,7 +1266,7 @@ int uart_write_bytes_with_break(uart_port_t uart_num, const void *src, size_t si
 static bool uart_check_buf_full(uart_port_t uart_num)
 {
     if (p_uart_obj[uart_num]->rx_buffer_full_flg) {
-        BaseType_t res = xRingbufferSend(p_uart_obj[uart_num]->rx_ring_buf, p_uart_obj[uart_num]->rx_data_buf, p_uart_obj[uart_num]->rx_stash_len, 1);
+        BaseType_t res = xRingbufferSend(p_uart_obj[uart_num]->rx_ring_buf, p_uart_obj[uart_num]->rx_data_buf, p_uart_obj[uart_num]->rx_stash_len, 0);
         if (res == pdTRUE) {
             UART_ENTER_CRITICAL(&(uart_context[uart_num].spinlock));
             p_uart_obj[uart_num]->rx_buffered_len += p_uart_obj[uart_num]->rx_stash_len;
@@ -1268,53 +1287,35 @@ int uart_read_bytes(uart_port_t uart_num, void *buf, uint32_t length, TickType_t
     ESP_RETURN_ON_FALSE((buf), (-1), UART_TAG, "uart data null");
     ESP_RETURN_ON_FALSE((p_uart_obj[uart_num]), (-1), UART_TAG, "uart driver error");
     uint8_t *data = NULL;
-    size_t size;
+    size_t size = 0;
     size_t copy_len = 0;
-    int len_tmp;
     if (xSemaphoreTake(p_uart_obj[uart_num]->rx_mux, (TickType_t)ticks_to_wait) != pdTRUE) {
         return -1;
     }
     while (length) {
-        if (p_uart_obj[uart_num]->rx_cur_remain == 0) {
-            data = (uint8_t *) xRingbufferReceive(p_uart_obj[uart_num]->rx_ring_buf, &size, (TickType_t) ticks_to_wait);
-            if (data) {
-                p_uart_obj[uart_num]->rx_head_ptr = data;
-                p_uart_obj[uart_num]->rx_ptr = data;
-                p_uart_obj[uart_num]->rx_cur_remain = size;
+        data = (uint8_t *) xRingbufferReceiveUpTo(p_uart_obj[uart_num]->rx_ring_buf, &size, (TickType_t) ticks_to_wait, length);
+        if (!data) {
+            // When using dual cores, `rx_buffer_full_flg` may read and write on different cores at same time,
+            // which may lose synchronization. So we also need to call `uart_check_buf_full` once when ringbuffer is empty
+            // to solve the possible asynchronous issues.
+            if (uart_check_buf_full(uart_num)) {
+                // This condition will never be true if `uart_read_bytes`
+                // and `uart_rx_intr_handler_default` are scheduled on the same core.
+                continue;
             } else {
-                //When using dual cores, `rx_buffer_full_flg` may read and write on different cores at same time,
-                //which may lose synchronization. So we also need to call `uart_check_buf_full` once when ringbuffer is empty
-                //to solve the possible asynchronous issues.
-                if (uart_check_buf_full(uart_num)) {
-                    //This condition will never be true if `uart_read_bytes`
-                    //and `uart_rx_intr_handler_default` are scheduled on the same core.
-                    continue;
-                } else {
-                    xSemaphoreGive(p_uart_obj[uart_num]->rx_mux);
-                    return copy_len;
-                }
+                // Timeout while not fetched all requested length
+                break;
             }
         }
-        if (p_uart_obj[uart_num]->rx_cur_remain > length) {
-            len_tmp = length;
-        } else {
-            len_tmp = p_uart_obj[uart_num]->rx_cur_remain;
-        }
-        memcpy((uint8_t *)buf + copy_len, p_uart_obj[uart_num]->rx_ptr, len_tmp);
+        memcpy((uint8_t *)buf + copy_len, data, size);
         UART_ENTER_CRITICAL(&(uart_context[uart_num].spinlock));
-        p_uart_obj[uart_num]->rx_buffered_len -= len_tmp;
-        uart_pattern_queue_update(uart_num, len_tmp);
-        p_uart_obj[uart_num]->rx_ptr += len_tmp;
+        p_uart_obj[uart_num]->rx_buffered_len -= size;
+        uart_pattern_queue_update(uart_num, size);
         UART_EXIT_CRITICAL(&(uart_context[uart_num].spinlock));
-        p_uart_obj[uart_num]->rx_cur_remain -= len_tmp;
-        copy_len += len_tmp;
-        length -= len_tmp;
-        if (p_uart_obj[uart_num]->rx_cur_remain == 0) {
-            vRingbufferReturnItem(p_uart_obj[uart_num]->rx_ring_buf, p_uart_obj[uart_num]->rx_head_ptr);
-            p_uart_obj[uart_num]->rx_head_ptr = NULL;
-            p_uart_obj[uart_num]->rx_ptr = NULL;
-            uart_check_buf_full(uart_num);
-        }
+        copy_len += size;
+        length -= size;
+        vRingbufferReturnItem(p_uart_obj[uart_num]->rx_ring_buf, data);
+        uart_check_buf_full(uart_num);
     }
 
     xSemaphoreGive(p_uart_obj[uart_num]->rx_mux);
@@ -1356,25 +1357,15 @@ esp_err_t uart_flush_input(uart_port_t uart_num)
     uart_hal_disable_intr_mask(&(uart_context[uart_num].hal), UART_INTR_RXFIFO_FULL | UART_INTR_RXFIFO_TOUT);
     UART_EXIT_CRITICAL(&(uart_context[uart_num].spinlock));
     while (true) {
-        if (p_uart->rx_head_ptr) {
-            vRingbufferReturnItem(p_uart->rx_ring_buf, p_uart->rx_head_ptr);
-            UART_ENTER_CRITICAL(&(uart_context[uart_num].spinlock));
-            p_uart_obj[uart_num]->rx_buffered_len -= p_uart->rx_cur_remain;
-            uart_pattern_queue_update(uart_num, p_uart->rx_cur_remain);
-            UART_EXIT_CRITICAL(&(uart_context[uart_num].spinlock));
-            p_uart->rx_ptr = NULL;
-            p_uart->rx_cur_remain = 0;
-            p_uart->rx_head_ptr = NULL;
-        }
-        data = (uint8_t*) xRingbufferReceive(p_uart->rx_ring_buf, &size, (TickType_t) 0);
-        if(data == NULL) {
+        data = (uint8_t *) xRingbufferReceive(p_uart->rx_ring_buf, &size, (TickType_t) 0);
+        if (data == NULL) {
             bool error = false;
             UART_ENTER_CRITICAL(&(uart_context[uart_num].spinlock));
-            if( p_uart_obj[uart_num]->rx_buffered_len != 0 ) {
+            if (p_uart_obj[uart_num]->rx_buffered_len != 0) {
                 p_uart_obj[uart_num]->rx_buffered_len = 0;
                 error = true;
             }
-            //We also need to clear the `rx_buffer_full_flg` here.
+            // We also need to clear the `rx_buffer_full_flg` here.
             p_uart_obj[uart_num]->rx_buffer_full_flg = false;
             UART_EXIT_CRITICAL(&(uart_context[uart_num].spinlock));
             if (error) {
@@ -1389,7 +1380,7 @@ esp_err_t uart_flush_input(uart_port_t uart_num)
         UART_EXIT_CRITICAL(&(uart_context[uart_num].spinlock));
         vRingbufferReturnItem(p_uart->rx_ring_buf, data);
         if (p_uart_obj[uart_num]->rx_buffer_full_flg) {
-            BaseType_t res = xRingbufferSend(p_uart_obj[uart_num]->rx_ring_buf, p_uart_obj[uart_num]->rx_data_buf, p_uart_obj[uart_num]->rx_stash_len, 1);
+            BaseType_t res = xRingbufferSend(p_uart_obj[uart_num]->rx_ring_buf, p_uart_obj[uart_num]->rx_data_buf, p_uart_obj[uart_num]->rx_stash_len, 0);
             if (res == pdTRUE) {
                 UART_ENTER_CRITICAL(&(uart_context[uart_num].spinlock));
                 p_uart_obj[uart_num]->rx_buffered_len += p_uart_obj[uart_num]->rx_stash_len;
@@ -1398,9 +1389,6 @@ esp_err_t uart_flush_input(uart_port_t uart_num)
             }
         }
     }
-    p_uart->rx_ptr = NULL;
-    p_uart->rx_cur_remain = 0;
-    p_uart->rx_head_ptr = NULL;
     uart_hal_rxfifo_rst(&(uart_context[uart_num].hal));
     /* Only re-enable UART_INTR_RXFIFO_TOUT or UART_INTR_RXFIFO_FULL if they
      * were explicitly enabled by the user. */
@@ -1447,6 +1435,11 @@ static void uart_free_driver_obj(uart_obj_t *uart_obj)
     free(uart_obj->tx_brk_sem_struct);
     free(uart_obj->tx_done_sem_struct);
     free(uart_obj->tx_fifo_sem_struct);
+#endif
+#if PROTECT_APB
+    if (uart_obj->pm_lock) {
+        esp_pm_lock_delete(uart_obj->pm_lock);
+    }
 #endif
     free(uart_obj);
 }
@@ -1533,6 +1526,12 @@ static uart_obj_t *uart_alloc_driver_obj(int event_queue_size, int tx_buffer_siz
         goto err;
     }
 #endif
+#if PROTECT_APB
+    if (esp_pm_lock_create(ESP_PM_APB_FREQ_MAX, 0, "uart_driver",
+                           &uart_obj->pm_lock) != ESP_OK) {
+        goto err;
+    }
+#endif
     return uart_obj;
 
 err:
@@ -1581,10 +1580,7 @@ esp_err_t uart_driver_install(uart_port_t uart_num, int rx_buffer_size, int tx_b
         p_uart_obj[uart_num]->rx_buffered_len = 0;
         p_uart_obj[uart_num]->rx_buffer_full_flg = false;
         p_uart_obj[uart_num]->tx_waiting_fifo = false;
-        p_uart_obj[uart_num]->rx_ptr = NULL;
-        p_uart_obj[uart_num]->rx_cur_remain = 0;
         p_uart_obj[uart_num]->rx_int_usr_mask = UART_INTR_RXFIFO_FULL | UART_INTR_RXFIFO_TOUT;
-        p_uart_obj[uart_num]->rx_head_ptr = NULL;
         p_uart_obj[uart_num]->tx_buf_size = tx_buffer_size;
         p_uart_obj[uart_num]->uart_select_notif_callback = NULL;
         xSemaphoreGive(p_uart_obj[uart_num]->tx_fifo_sem);
@@ -1756,7 +1752,7 @@ esp_err_t uart_get_collision_flag(uart_port_t uart_num, bool *collision_flag)
 esp_err_t uart_set_wakeup_threshold(uart_port_t uart_num, int wakeup_threshold)
 {
     ESP_RETURN_ON_FALSE((uart_num < UART_NUM_MAX), ESP_ERR_INVALID_ARG, UART_TAG, "uart_num error");
-    ESP_RETURN_ON_FALSE((wakeup_threshold <= UART_ACTIVE_THRESHOLD_V && wakeup_threshold > UART_MIN_WAKEUP_THRESH), ESP_ERR_INVALID_ARG, UART_TAG,
+    ESP_RETURN_ON_FALSE((wakeup_threshold <= UART_ACTIVE_THRESHOLD_V && wakeup_threshold >= UART_MIN_WAKEUP_THRESH), ESP_ERR_INVALID_ARG, UART_TAG,
                         "wakeup_threshold out of bounds");
     UART_ENTER_CRITICAL(&(uart_context[uart_num].spinlock));
     uart_hal_set_wakeup_thrd(&(uart_context[uart_num].hal), wakeup_threshold);

@@ -42,7 +42,7 @@ ESP-IDF 完全支持将片外 RAM 集成到您的应用程序中。在启动并�
     * :ref:`external_ram_config_capability_allocator`
     * :ref:`external_ram_config_malloc` (default)
     * :ref:`external_ram_config_bss`
-    :esp32: * :ref:`external_ram_config_noinit`
+    * :ref:`external_ram_config_noinit`
     :esp32s2 or esp32s3: * :ref:`external_ram_config_instructions`
     :esp32s2 or esp32s3: * :ref:`external_ram_config_rodata`
 
@@ -88,8 +88,8 @@ ESP-IDF 启动过程中，片外 RAM 被映射到以 {IDF_TARGET_PSRAM_ADDR_STAR
 
 如果某次内存分配偏向于片外存储器，您也可以使用 :ref:`CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL` 设置分配空间的大小阈值，控制分配结果：
 
-- 如果分配的空间小于阈值，分配程序将首先选择内部存储器。
-- 如果分配的空间等于或大于阈值，分配程序将首先选择外部存储器。
+- 如果分配的空间小于或等于阈值，分配程序将首先选择内部存储器。
+- 如果分配的空间大于阈值，分配程序将首先选择外部存储器。
 
 如果优先考虑的内部或外部存储器中没有可用的存储块，分配程序则会选择其他类型存储。
 
@@ -102,7 +102,7 @@ ESP-IDF 启动过程中，片外 RAM 被映射到以 {IDF_TARGET_PSRAM_ADDR_STAR
 
 通过勾选 :ref:`CONFIG_SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY` 启用该选项。
 
-启用该选项后，从 {IDF_TARGET_PSRAM_ADDR_START} 起始的地址空间将用于存储来自 lwip、net80211、libpp 和 bluedroid ESP-IDF 库中零初始化的数据（BSS 段）。
+启用该选项后，PSRAM 被映射到的数据虚拟地址空间将用于存储来自 lwip、net80211、libpp, wpa_supplicant 和 bluedroid ESP-IDF 库中零初始化的数据（BSS 段）。
 
 通过将宏 ``EXT_RAM_BSS_ATTR`` 应用于任何静态声明（未初始化为非零值），可以将附加数据从内部 BSS 段移到片外 RAM。
 
@@ -112,16 +112,14 @@ ESP-IDF 启动过程中，片外 RAM 被映射到以 {IDF_TARGET_PSRAM_ADDR_STAR
 
 剩余的片外 RAM 也可以通过上述方法添加到堆分配器中。
 
-.. only:: esp32
+.. _external_ram_config_noinit:
 
-    .. _external_ram_config_noinit:
+允许 .noinit 段放入片外存储器
+-------------------------------------
 
-    允许 .noinit 段放入片外存储器
-    -------------------------------------
+通过勾选 :ref:`CONFIG_SPIRAM_ALLOW_NOINIT_SEG_EXTERNAL_MEMORY` 启用该选项。启用该选项后，PSRAM 被映射到的数据虚拟地址空间将用于存储未初始化的数据。即使在启动或重新启动期间，放置在该段中的值也不会被初始化或修改。
 
-    通过勾选 :ref:`CONFIG_SPIRAM_ALLOW_NOINIT_SEG_EXTERNAL_MEMORY` 启用该选项。启用该选项后，外部 RAM 中提供的地址空间区域将用于存储未初始化的数据。即使在启动或重新启动期间，放置在该段中的值也不会被初始化或修改。
-
-    通过应用 ``EXT_RAM_NOINIT_ATTR`` 宏，可以将数据从内部 NOINIT 段移到片外 RAM。剩余的片外 RAM 也可以通过上述方法添加到堆分配器中，具体请参考 :ref:`external_ram_config_capability_allocator`。
+通过应用 ``EXT_RAM_NOINIT_ATTR`` 宏，可以将数据从内部 NOINIT 段移到片外 RAM。剩余的片外 RAM 也可以通过上述方法添加到堆分配器中，具体请参考 :ref:`external_ram_config_capability_allocator`。
 
 .. only:: SOC_SPIRAM_XIP_SUPPORTED
 

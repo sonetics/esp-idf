@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2024 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -85,17 +85,18 @@ static inline __attribute__((always_inline)) void clk_ll_bbpll_disable(void)
  */
 static inline __attribute__((always_inline)) void clk_ll_xtal32k_enable(clk_ll_xtal32k_enable_mode_t mode)
 {
-    // Configure xtal32k
-    clk_ll_xtal32k_config_t cfg = CLK_LL_XTAL32K_CONFIG_DEFAULT();
-    REG_SET_FIELD(RTC_CNTL_EXT_XTL_CONF_REG, RTC_CNTL_DAC_XTAL_32K, cfg.dac);
-    REG_SET_FIELD(RTC_CNTL_EXT_XTL_CONF_REG, RTC_CNTL_DRES_XTAL_32K, cfg.dres);
-    REG_SET_FIELD(RTC_CNTL_EXT_XTL_CONF_REG, RTC_CNTL_DGM_XTAL_32K, cfg.dgm);
-    REG_SET_FIELD(RTC_CNTL_EXT_XTL_CONF_REG, RTC_CNTL_DBUF_XTAL_32K, cfg.dbuf);
-    // Enable xtal32k xpd status
-    SET_PERI_REG_MASK(RTC_CNTL_EXT_XTL_CONF_REG, RTC_CNTL_XPD_XTAL_32K);
     if (mode == CLK_LL_XTAL32K_ENABLE_MODE_EXTERNAL) {
-        /* TODO: external 32k oscillator may need different settings */
-        ;
+        SET_PERI_REG_MASK(RTC_CNTL_EXT_XTL_CONF_REG, RTC_CNTL_XTAL32K_GPIO_SEL);
+    } else {
+        // Configure xtal32k
+        CLEAR_PERI_REG_MASK(RTC_CNTL_EXT_XTL_CONF_REG, RTC_CNTL_XTAL32K_GPIO_SEL);
+        clk_ll_xtal32k_config_t cfg = CLK_LL_XTAL32K_CONFIG_DEFAULT();
+        REG_SET_FIELD(RTC_CNTL_EXT_XTL_CONF_REG, RTC_CNTL_DAC_XTAL_32K, cfg.dac);
+        REG_SET_FIELD(RTC_CNTL_EXT_XTL_CONF_REG, RTC_CNTL_DRES_XTAL_32K, cfg.dres);
+        REG_SET_FIELD(RTC_CNTL_EXT_XTL_CONF_REG, RTC_CNTL_DGM_XTAL_32K, cfg.dgm);
+        REG_SET_FIELD(RTC_CNTL_EXT_XTL_CONF_REG, RTC_CNTL_DBUF_XTAL_32K, cfg.dbuf);
+        // Enable xtal32k xpd status
+        SET_PERI_REG_MASK(RTC_CNTL_EXT_XTL_CONF_REG, RTC_CNTL_XPD_XTAL_32K);
     }
 }
 
@@ -308,7 +309,7 @@ static inline __attribute__((always_inline)) void clk_ll_bbpll_set_config(uint32
     uint8_t dr3;
     uint8_t dchgp;
     uint8_t dcur;
-    uint8_t dbias;
+    uint8_t dbias = 3;
 
     if (pll_freq_mhz == CLK_LL_PLL_480M_FREQ_MHZ) {
         /* Configure 480M PLL */
@@ -320,7 +321,6 @@ static inline __attribute__((always_inline)) void clk_ll_bbpll_set_config(uint32
             dr3 = 0;
             dchgp = 5;
             dcur = 3;
-            dbias = 2;
             break;
         case RTC_XTAL_FREQ_32M:
             div_ref = 1;
@@ -329,7 +329,6 @@ static inline __attribute__((always_inline)) void clk_ll_bbpll_set_config(uint32
             dr3 = 1;
             dchgp = 4;
             dcur = 0;
-            dbias = 2;
             break;
         default:
             div_ref = 0;
@@ -338,7 +337,6 @@ static inline __attribute__((always_inline)) void clk_ll_bbpll_set_config(uint32
             dr3 = 0;
             dchgp = 5;
             dcur = 3;
-            dbias = 2;
             break;
         }
         REGI2C_WRITE(I2C_BBPLL, I2C_BBPLL_MODE_HF, 0x6B);
@@ -352,7 +350,6 @@ static inline __attribute__((always_inline)) void clk_ll_bbpll_set_config(uint32
             dr3 = 0;
             dchgp = 5;
             dcur = 3;
-            dbias = 2;
             break;
         case RTC_XTAL_FREQ_32M:
             div_ref = 1;
@@ -361,7 +358,6 @@ static inline __attribute__((always_inline)) void clk_ll_bbpll_set_config(uint32
             dr3 = 0;
             dchgp = 5;
             dcur = 3;
-            dbias = 2;
             break;
         default:
             div_ref = 0;
@@ -370,7 +366,6 @@ static inline __attribute__((always_inline)) void clk_ll_bbpll_set_config(uint32
             dr3 = 0;
             dchgp = 5;
             dcur = 3;
-            dbias = 2;
             break;
         }
         REGI2C_WRITE(I2C_BBPLL, I2C_BBPLL_MODE_HF, 0x69);

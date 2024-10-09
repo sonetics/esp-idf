@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2021 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2024 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -8,7 +8,9 @@
 #include <freertos/FreeRTOS.h>
 #include <esp_system.h>
 #include <esp_log.h>
+#ifdef CONFIG_BT_CONTROLLER_ENABLED
 #include "esp_bt.h"
+#endif
 #include <esp_gap_ble_api.h>
 #include <esp_gatts_api.h>
 #include <esp_bt_main.h>
@@ -46,12 +48,24 @@ static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param
     switch (event) {
     case ESP_GAP_BLE_ADV_DATA_SET_COMPLETE_EVT:
         adv_config_done &= (~adv_config_flag);
+
+        if (g_ble_cfg_p->ble_addr) {
+            esp_ble_gap_set_rand_addr(g_ble_cfg_p->ble_addr);
+            g_ble_cfg_p->adv_params.own_addr_type = BLE_ADDR_TYPE_RANDOM;
+        }
+
         if (adv_config_done == 0) {
             esp_ble_gap_start_advertising(&g_ble_cfg_p->adv_params);
         }
         break;
     case ESP_GAP_BLE_SCAN_RSP_DATA_SET_COMPLETE_EVT:
         adv_config_done &= (~scan_rsp_config_flag);
+
+        if (g_ble_cfg_p->ble_addr) {
+            esp_ble_gap_set_rand_addr(g_ble_cfg_p->ble_addr);
+            g_ble_cfg_p->adv_params.own_addr_type = BLE_ADDR_TYPE_RANDOM;
+        }
+
         if (adv_config_done == 0) {
             esp_ble_gap_start_advertising(&g_ble_cfg_p->adv_params);
         }
@@ -213,6 +227,7 @@ esp_err_t simple_ble_start(simple_ble_cfg_t *cfg)
     ESP_LOGD(TAG, "Free mem at start of simple_ble_init %" PRIu32, esp_get_free_heap_size());
     esp_err_t ret;
 
+#ifdef CONFIG_BT_CONTROLLER_ENABLED
     esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
     ret = esp_bt_controller_init(&bt_cfg);
     if (ret) {
@@ -220,18 +235,20 @@ esp_err_t simple_ble_start(simple_ble_cfg_t *cfg)
         return ret;
     }
 
-#ifdef CONFIG_BTDM_CTRL_MODE_BTDM
-    ret = esp_bt_controller_enable(ESP_BT_MODE_BTDM);
-#elif defined CONFIG_BTDM_CTRL_MODE_BLE_ONLY || CONFIG_BT_CTRL_MODE_EFF
-    ret = esp_bt_controller_enable(ESP_BT_MODE_BLE);
-#else
+#ifdef CONFIG_BTDM_CTRL_MODE_BR_EDR_ONLY
     ESP_LOGE(TAG, "Configuration mismatch. Select BLE Only or BTDM mode from menuconfig");
     return ESP_FAIL;
+#elif CONFIG_BTDM_CTRL_MODE_BTDM
+    ret = esp_bt_controller_enable(ESP_BT_MODE_BTDM);
+#else  //For all other chips supporting BLE Only
+    ret = esp_bt_controller_enable(ESP_BT_MODE_BLE);
 #endif
+
     if (ret) {
         ESP_LOGE(TAG, "%s enable controller failed %d", __func__, ret);
         return ret;
     }
+#endif
 
     ret = esp_bluedroid_init();
     if (ret) {
@@ -306,6 +323,7 @@ esp_err_t simple_ble_stop(void)
         return err;
     }
     ESP_LOGD(TAG, "esp_bluedroid_deinit called successfully");
+#ifdef CONFIG_BT_CONTROLLER_ENABLED
     err = esp_bt_controller_disable();
     if (err != ESP_OK) {
         return ESP_FAIL;
@@ -320,7 +338,7 @@ esp_err_t simple_ble_stop(void)
         return ESP_FAIL;
     }
     ESP_LOGD(TAG, "esp_bt_controller_deinit called successfully");
-
+#endif
     ESP_LOGD(TAG, "Free mem at end of simple_ble_stop %" PRIu32, esp_get_free_heap_size());
     return ESP_OK;
 }

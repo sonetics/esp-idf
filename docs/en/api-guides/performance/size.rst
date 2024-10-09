@@ -16,9 +16,6 @@ To optimize both firmware binary size and memory usage it's necessary to measure
 
 Using the :ref:`idf.py` sub-commands ``size``, ``size-components`` and ``size-files`` provides a summary of memory used by the project:
 
-.. note::
-    It is possible to add ``-DOUTPUT_FORMAT=csv`` or ``-DOUTPUT_FORMAT=json`` to get the output in CSV or JSON format.
-
 Size Summary (idf.py size)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -419,6 +416,7 @@ These include:
 - :ref:`CONFIG_MBEDTLS_ECP_FIXED_POINT_OPTIM`
 - Change :ref:`CONFIG_MBEDTLS_TLS_MODE` if both server & client functionalities are not needed
 - Consider disabling some ciphersuites listed in the "TLS Key Exchange Methods" sub-menu (i.e. :ref:`CONFIG_MBEDTLS_KEY_EXCHANGE_RSA`)
+- Consider disabling :ref:`CONFIG_MBEDTLS_ERROR_STRINGS` if the application is pulling in mbedTLS error strings because of :cpp:func:`mbedtls_strerror` usage
 
 The help text for each option has some more information.
 
@@ -430,6 +428,11 @@ The help text for each option has some more information.
    - Ensure that any TLS client(s) that connect to the device can still connect with supported/recommended cipher suites. Note that future versions of client operating systems may remove support for some features, so it is recommended to enable multiple supported cipher suites or algorithms for redundancy.
 
    If depending on third party clients or servers, always pay attention to announcements about future changes to supported TLS features. If not, the {IDF_TARGET_NAME} device may become inaccessible if support changes.
+
+.. only:: CONFIG_ESP_ROM_HAS_MBEDTLS_CRYPTO_LIB
+
+   Enabling the config option :ref:`CONFIG_MBEDTLS_USE_CRYPTO_ROM_IMPL` will use the crypto algorithms from mbedTLS library inside the chip ROM.
+   Disabling the config option :ref:`CONFIG_MBEDTLS_USE_CRYPTO_ROM_IMPL` will use the crypto algorithms from the ESP-IDF mbedtls component library. This will increase the binary size (flash footprint).
 
 .. note::
 

@@ -30,7 +30,7 @@ else()
         endif()
     endif()
 
-    if(CONFIG_HEAP_TLSF_USE_ROM_IMPL AND CONFIG_ESP_ROM_TLSF_CHECK_PATCH)
+    if(CONFIG_HEAP_TLSF_USE_ROM_IMPL AND (CONFIG_ESP_ROM_TLSF_CHECK_PATCH OR CONFIG_HEAP_TLSF_CHECK_PATCH))
         # This file shall be included in the build if TLSF in ROM is activated
         list(APPEND sources "patches/esp_rom_tlsf.c")
     endif()
@@ -114,7 +114,6 @@ if(BOOTLOADER_BUILD)
 
     elseif(target STREQUAL "esp32c2")
         rom_linker_script("newlib")
-        rom_linker_script("mbedtls")
 
     elseif(target STREQUAL "esp32c6")
         rom_linker_script("newlib")
@@ -216,14 +215,29 @@ else() # Regular app build
             rom_linker_script("eco3")
         endif()
 
+        if(CONFIG_ESP32C3_REV_MIN_FULL GREATER_EQUAL 101)
+            rom_linker_script("eco7")
+        endif()
+
     elseif(target STREQUAL "esp32c2")
         rom_linker_script("newlib")
         rom_linker_script("version")
-        rom_linker_script("mbedtls")
+
+        if(CONFIG_MBEDTLS_USE_CRYPTO_ROM_IMPL)
+            rom_linker_script("mbedtls")
+            # For ESP32C2(ECO4), mbedTLS in ROM has been updated to v3.6.0-LTS
+            if(CONFIG_ESP32C2_REV_MIN_FULL GREATER_EQUAL 200)
+                rom_linker_script("mbedtls.eco4")
+            endif()
+        endif()
 
         if(CONFIG_NEWLIB_NANO_FORMAT)
             # nano formatting functions in ROM are also built for 64-bit time_t.
             rom_linker_script("newlib-nano")
+        endif()
+
+        if(CONFIG_ESP32C2_REV_MIN_FULL GREATER_EQUAL 200)
+            rom_linker_script("eco4")
         endif()
 
     elseif(target STREQUAL "esp32c6")
@@ -261,7 +275,7 @@ else() # Regular app build
             rom_linker_script("wdt")
         endif()
 
-        if(CONFIG_NEWLIB_NANO_FORMAT)
+        if(CONFIG_NEWLIB_NANO_FORMAT AND NOT CONFIG_ESP_ROM_HAS_NEWLIB_NANO_PRINTF_FLOAT_BUG)
             # nano formatting functions in ROM are also built for 64-bit time_t.
             rom_linker_script("newlib-nano")
         endif()
@@ -273,7 +287,7 @@ else() # Regular app build
         # to force the linker to integrate the whole `esp_rom_tlsf.c` object file inside the
         # final binary. This is necessary because tlsf_set_rom_patches is a constructor, thus,
         # there as no explicit reference/call to it in IDF.
-        if(CONFIG_ESP_ROM_TLSF_CHECK_PATCH)
+        if((CONFIG_ESP_ROM_TLSF_CHECK_PATCH OR CONFIG_HEAP_TLSF_CHECK_PATCH))
             target_link_libraries(${COMPONENT_LIB} PRIVATE "-u tlsf_set_rom_patches")
         endif()
 
@@ -286,5 +300,5 @@ else() # Regular app build
 endif()
 
 if(target STREQUAL "esp32s2")
-    target_sources(${COMPONENT_LIB} PRIVATE "esp32s2/usb_descriptors.c")
+    target_sources(${COMPONENT_LIB} PRIVATE "esp32s2/usb_patches.c")
 endif()

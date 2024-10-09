@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2021 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2023 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -33,8 +33,9 @@ typedef enum {
     ESP_BT_SET_COD_MAJOR_MINOR     = 0x01,          /*!< overwrite major, minor class */
     ESP_BT_SET_COD_SERVICE_CLASS   = 0x02,          /*!< set the bits in the input, the current bit will remain */
     ESP_BT_CLR_COD_SERVICE_CLASS   = 0x04,          /*!< clear the bits in the input, others will remain */
-    ESP_BT_SET_COD_ALL             = 0x08,          /*!< overwrite major, minor, set the bits in service class */
-    ESP_BT_INIT_COD                = 0x0a,          /*!< overwrite major, minor, and service class */
+    ESP_BT_SET_COD_ALL             = 0x08,          /*!< overwrite major, minor, set the bits in service class, reserved_2 remain unchanged */
+    ESP_BT_INIT_COD                = 0x0a,          /*!< overwrite major, minor, and service class, reserved_2 remain unchanged */
+    ESP_BT_SET_COD_RESERVED_2      = 0x10,          /*!< overwrite the two least significant bits reserved_2 whose default value is 0b00; other values of reserved_2 are invalid according to Bluetooth Core Specification 5.4 */
 } esp_bt_cod_mode_t;
 
 #define ESP_BT_GAP_AFH_CHANNELS_LEN     10
@@ -91,7 +92,35 @@ typedef struct {
 
 typedef uint8_t esp_bt_eir_type_t;
 
+/* ACL Packet Types */
+#define ESP_BT_ACL_PKT_TYPES_MASK_DM1           0x0008
+#define ESP_BT_ACL_PKT_TYPES_MASK_DH1           0x0010
+#define ESP_BT_ACL_PKT_TYPES_MASK_DM3           0x0400
+#define ESP_BT_ACL_PKT_TYPES_MASK_DH3           0x0800
+#define ESP_BT_ACL_PKT_TYPES_MASK_DM5           0x4000
+#define ESP_BT_ACL_PKT_TYPES_MASK_DH5           0x8000
+#define ESP_BT_ACL_PKT_TYPES_MASK_NO_2_DH1      0x0002
+#define ESP_BT_ACL_PKT_TYPES_MASK_NO_3_DH1      0x0004
+#define ESP_BT_ACL_PKT_TYPES_MASK_NO_2_DH3      0x0100
+#define ESP_BT_ACL_PKT_TYPES_MASK_NO_3_DH3      0x0200
+#define ESP_BT_ACL_PKT_TYPES_MASK_NO_2_DH5      0x1000
+#define ESP_BT_ACL_PKT_TYPES_MASK_NO_3_DH5      0x2000
 
+// DM1 cann not be disabled. All options are mandatory to include DM1.
+#define ESP_BT_ACL_DM1_ONLY     (ESP_BT_ACL_PKT_TYPES_MASK_DM1 | 0x330e)         /* 0x330e */
+#define ESP_BT_ACL_DH1_ONLY     (ESP_BT_ACL_PKT_TYPES_MASK_DH1 | 0x330e)         /* 0x331e */
+#define ESP_BT_ACL_DM3_ONLY     (ESP_BT_ACL_PKT_TYPES_MASK_DM3 | 0x330e)         /* 0x370e */
+#define ESP_BT_ACL_DH3_ONLY     (ESP_BT_ACL_PKT_TYPES_MASK_DH3 | 0x330e)         /* 0x3b0e */
+#define ESP_BT_ACL_DM5_ONLY     (ESP_BT_ACL_PKT_TYPES_MASK_DM5 | 0x330e)         /* 0x730e */
+#define ESP_BT_ACL_DH5_ONLY     (ESP_BT_ACL_PKT_TYPES_MASK_DH5 | 0x330e)         /* 0xb30e */
+#define ESP_BT_ACL_2_DH1_ONLY   (~ESP_BT_ACL_PKT_TYPES_MASK_NO_2_DH1 & 0x330e)   /* 0x330c */
+#define ESP_BT_ACL_3_DH1_ONLY   (~ESP_BT_ACL_PKT_TYPES_MASK_NO_3_DH1 & 0x330e)   /* 0x330a */
+#define ESP_BT_ACL_2_DH3_ONLY   (~ESP_BT_ACL_PKT_TYPES_MASK_NO_2_DH3 & 0x330e)   /* 0x320e */
+#define ESP_BT_ACL_3_DH3_ONLY   (~ESP_BT_ACL_PKT_TYPES_MASK_NO_3_DH3 & 0x330e)   /* 0x310e */
+#define ESP_BT_ACL_2_DH5_ONLY   (~ESP_BT_ACL_PKT_TYPES_MASK_NO_2_DH5 & 0x330e)   /* 0x230e */
+#define ESP_BT_ACL_3_DH5_ONLY   (~ESP_BT_ACL_PKT_TYPES_MASK_NO_3_DH5 & 0x330e)   /* 0x130e */
+
+typedef uint16_t esp_bt_acl_pkt_type_t;
 
 /* ESP_BT_EIR_FLAG bit definition */
 #define ESP_BT_EIR_FLAG_LIMIT_DISC         (0x01 << 0)
@@ -177,6 +206,28 @@ typedef enum {
     ESP_BT_COD_MAJOR_DEV_UNCATEGORIZED       = 31,   /*!< Uncategorized: device not specified */
 } esp_bt_cod_major_dev_t;
 
+/// Minor device class field of Class of Device for Peripheral Major Class
+typedef enum {
+    ESP_BT_COD_MINOR_PERIPHERAL_KEYBOARD            = 0x10, /*!< Keyboard */
+    ESP_BT_COD_MINOR_PERIPHERAL_POINTING            = 0x20, /*!< Pointing */
+    ESP_BT_COD_MINOR_PERIPHERAL_COMBO               = 0x30, /*!< Combo
+                                                            ESP_BT_COD_MINOR_PERIPHERAL_KEYBOARD, ESP_BT_COD_MINOR_PERIPHERAL_POINTING
+                                                            and ESP_BT_COD_MINOR_PERIPHERAL_COMBO can be OR'd with one of the
+                                                            following values to identify a multifunctional device. e.g.
+                                                                ESP_BT_COD_MINOR_PERIPHERAL_KEYBOARD | ESP_BT_COD_MINOR_PERIPHERAL_GAMEPAD
+                                                                ESP_BT_COD_MINOR_PERIPHERAL_POINTING | ESP_BT_COD_MINOR_PERIPHERAL_SENSING_DEVICE
+                                                             */
+    ESP_BT_COD_MINOR_PERIPHERAL_JOYSTICK            = 0x01, /*!< Joystick */
+    ESP_BT_COD_MINOR_PERIPHERAL_GAMEPAD             = 0x02, /*!< Gamepad */
+    ESP_BT_COD_MINOR_PERIPHERAL_REMOTE_CONTROL      = 0x03, /*!< Remote Control */
+    ESP_BT_COD_MINOR_PERIPHERAL_SENSING_DEVICE      = 0x04, /*!< Sensing Device */
+    ESP_BT_COD_MINOR_PERIPHERAL_DIGITIZING_TABLET   = 0x05, /*!< Digitizing Tablet */
+    ESP_BT_COD_MINOR_PERIPHERAL_CARD_READER         = 0x06, /*!< Card Reader */
+    ESP_BT_COD_MINOR_PERIPHERAL_DIGITAL_PAN         = 0x07, /*!< Digital Pan */
+    ESP_BT_COD_MINOR_PERIPHERAL_HAND_SCANNER        = 0x08, /*!< Hand Scanner */
+    ESP_BT_COD_MINOR_PERIPHERAL_HAND_GESTURAL_INPUT = 0x09, /*!< Hand Gestural Input */
+} esp_bt_cod_minor_peripheral_t;
+
 /// Bits of major device class field
 #define ESP_BT_COD_MAJOR_DEV_BIT_MASK         (0x1f00) /*!< Major device bit mask */
 #define ESP_BT_COD_MAJOR_DEV_BIT_OFFSET       (8)      /*!< Major device bit offset */
@@ -218,6 +269,7 @@ typedef enum {
     ESP_BT_GAP_QOS_CMPL_EVT,                        /*!< QOS complete event */
     ESP_BT_GAP_ACL_CONN_CMPL_STAT_EVT,              /*!< ACL connection complete status event */
     ESP_BT_GAP_ACL_DISCONN_CMPL_STAT_EVT,           /*!< ACL disconnection complete status event */
+    ESP_BT_GAP_ACL_PKT_TYPE_CHANGED_EVT,            /*!< Set ACL packet types event */
     ESP_BT_GAP_EVT_MAX,
 } esp_bt_gap_cb_event_t;
 
@@ -354,8 +406,9 @@ typedef union {
      * @brief ESP_BT_GAP_MODE_CHG_EVT
      */
     struct mode_chg_param {
-        esp_bd_addr_t bda;                      /*!< remote bluetooth device address*/
-        esp_bt_pm_mode_t mode;                  /*!< PM mode*/
+        esp_bd_addr_t bda;                      /*!< remote bluetooth device address */
+        esp_bt_pm_mode_t mode;                  /*!< PM mode */
+        uint16_t interval;                      /*!< Number of baseband slots. unit is 0.625ms */
     } mode_chg;                                 /*!< mode change event parameter struct */
 
     /**
@@ -376,6 +429,15 @@ typedef union {
                                                     which from the master to a particular slave on the ACL
                                                     logical transport. unit is 0.625ms. */
     } qos_cmpl;                                /*!< QoS complete parameter struct */
+
+    /**
+     * @brief ESP_BT_GAP_ACL_PKT_TYPE_CHANGED_EVT
+     */
+    struct set_acl_pkt_types_param {
+        esp_bt_status_t status;                 /*!< set ACL packet types status */
+        esp_bd_addr_t bda;                      /*!< remote bluetooth device address */
+        uint16_t pkt_types;                     /*!< packet types successfully set */
+    } set_acl_pkt_types;                        /*!< set ACL packet types parameter struct */
 
     /**
      * @brief ESP_BT_GAP_ACL_CONN_CMPL_STAT_EVT
@@ -790,6 +852,17 @@ esp_err_t esp_bt_gap_read_remote_name(esp_bd_addr_t remote_bda);
 *
 */
 esp_err_t esp_bt_gap_set_qos(esp_bd_addr_t remote_bda, uint32_t t_poll);
+
+/**
+ * @brief           Set ACL packet types. FOR INTERNAL TESTING ONLY.
+ *                  An ESP_BT_GAP_SET_ACL_PPKT_TYPES_EVT event will reported to
+ *                  the APP layer.
+ *
+ * @return          - ESP_OK: success
+ *                  - ESP_ERR_INVALID_STATE: if bluetooth stack is not yet enabled
+ *                  - other: failed
+ */
+esp_err_t esp_bt_gap_set_acl_pkt_types(esp_bd_addr_t remote_bda, esp_bt_acl_pkt_type_t pkt_types);
 
 #ifdef __cplusplus
 }

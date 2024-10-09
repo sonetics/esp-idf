@@ -1,10 +1,4 @@
 #
-# libsodium
-#
-CONFIG_LIBSODIUM_USE_MBEDTLS_SHA=y
-# end of libsodium
-
-#
 # Partition Table
 #
 CONFIG_PARTITION_TABLE_CUSTOM=y
@@ -13,6 +7,11 @@ CONFIG_PARTITION_TABLE_FILENAME="partitions.csv"
 CONFIG_PARTITION_TABLE_OFFSET=0x8000
 CONFIG_PARTITION_TABLE_MD5=y
 # end of Partition Table
+
+#
+# Wireless Coexistence
+#
+CONFIG_ESP_COEX_SW_COEXIST_ENABLE=n
 
 #
 # OpenThread
@@ -35,7 +34,6 @@ CONFIG_OPENTHREAD_DNS_CLIENT=n
 CONFIG_LOG_BOOTLOADER_LEVEL_ERROR=y
 CONFIG_LOG_BOOTLOADER_LEVEL_INFO=n
 # End of deprecated options
-
 
 #
 # Configurations for optimizing the size of ot_rcp firmware

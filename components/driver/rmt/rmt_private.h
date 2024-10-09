@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <stdatomic.h>
 #include "sdkconfig.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -17,6 +18,7 @@
 #include "hal/dma_types.h"
 #include "esp_intr_alloc.h"
 #include "esp_heap_caps.h"
+#include "esp_clk_tree.h"
 #include "esp_pm.h"
 #include "esp_attr.h"
 #include "esp_private/gdma.h"
@@ -26,7 +28,7 @@
 extern "C" {
 #endif
 
-#if CONFIG_RMT_ISR_IRAM_SAFE
+#if CONFIG_RMT_ISR_IRAM_SAFE || CONFIG_RMT_RECV_FUNC_IN_IRAM
 #define RMT_MEM_ALLOC_CAPS      (MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)
 #else
 #define RMT_MEM_ALLOC_CAPS      MALLOC_CAP_DEFAULT
@@ -69,8 +71,12 @@ typedef enum {
 } rmt_channel_direction_t;
 
 typedef enum {
+    RMT_FSM_INIT_WAIT,
     RMT_FSM_INIT,
+    RMT_FSM_ENABLE_WAIT,
     RMT_FSM_ENABLE,
+    RMT_FSM_RUN_WAIT,
+    RMT_FSM_RUN,
 } rmt_fsm_t;
 
 enum {
@@ -108,7 +114,7 @@ struct rmt_channel_t {
     portMUX_TYPE spinlock;  // prevent channel resource accessing by user and interrupt concurrently
     uint32_t resolution_hz; // channel clock resolution
     intr_handle_t intr;     // allocated interrupt handle for each channel
-    rmt_fsm_t fsm;          // channel life cycle specific FSM
+    _Atomic rmt_fsm_t fsm;  // channel life cycle specific FSM
     rmt_channel_direction_t direction; // channel direction
     rmt_symbol_word_t *hw_mem_base;    // base address of RMT channel hardware memory
     rmt_symbol_word_t *dma_mem_base;   // base address of RMT channel DMA buffer
@@ -165,7 +171,8 @@ typedef struct {
 
 struct rmt_rx_channel_t {
     rmt_channel_t base;                  // channel base class
-    size_t mem_off;                      // starting offset to fetch the symbols in RMTMEM
+    uint32_t filter_clock_resolution_hz; // filter clock resolution, in Hz
+    size_t mem_off;                      // starting offset to fetch the symbols in RMT-MEM
     size_t ping_pong_symbols;            // ping-pong size (half of the RMT channel memory)
     rmt_rx_done_callback_t on_recv_done; // callback, invoked on receive done
     void *user_data;                     // user context

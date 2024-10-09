@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2017-2021 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2017-2024 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -599,7 +599,7 @@ static int provisioner_start_prov_pb_adv(const uint8_t uuid[16], const bt_mesh_a
 
     if (is_unprov_dev_being_provision(uuid)) {
         bt_mesh_pb_adv_unlock();
-        return -EALREADY;
+        return 0;
     }
 
     for (i = 0; i < CONFIG_BLE_MESH_PBA_SAME_TIME; i++) {
@@ -660,7 +660,7 @@ static int provisioner_start_prov_pb_gatt(const uint8_t uuid[16], const bt_mesh_
 
     if (is_unprov_dev_being_provision(uuid)) {
         bt_mesh_pb_gatt_unlock();
-        return -EALREADY;
+        return 0;
     }
 
     for (i = CONFIG_BLE_MESH_PBA_SAME_TIME; i < BLE_MESH_PROV_SAME_TIME; i++) {
@@ -1459,16 +1459,27 @@ static int bearer_ctl_send(const uint8_t idx, uint8_t op, void *data, uint8_t da
 static void send_link_open(const uint8_t idx)
 {
     int j;
+    uint8_t count;
 
-    /** Generate link ID, and may need to check if this id is
-     *  currently being used, which may will not happen ever.
-     */
-    bt_mesh_rand(&link[idx].link_id, sizeof(uint32_t));
+    link[idx].link_id = 0;
+
     while (1) {
+        count = 0;
+
+        /* Make sure the generated Link ID is not 0 */
+        while(link[idx].link_id == 0) {
+            bt_mesh_rand(&link[idx].link_id, sizeof(link[idx].link_id));
+            if (count++ > 10) {
+                BT_ERR("Link ID error: all zero");
+                return;
+            }
+        }
+
+        /* Check if the generated Link ID is the same with other links */
         for (j = 0; j < CONFIG_BLE_MESH_PBA_SAME_TIME; j++) {
             if (bt_mesh_atomic_test_bit(link[j].flags, LINK_ACTIVE) || link[j].linking) {
                 if (link[idx].link_id == link[j].link_id) {
-                    bt_mesh_rand(&link[idx].link_id, sizeof(uint32_t));
+                    bt_mesh_rand(&link[idx].link_id, sizeof(link[idx].link_id));
                     break;
                 }
             }
@@ -1702,7 +1713,7 @@ static void prov_capabilities(const uint8_t idx, const uint8_t *data)
 
     algorithms = sys_get_be16(&data[1]);
     BT_INFO("Algorithms:        0x%04x", algorithms);
-    if (algorithms != BIT(PROV_ALG_P256)) {
+    if (!(algorithms & BIT(PROV_ALG_P256))) {
         BT_ERR("Invalid algorithms 0x%04x", algorithms);
         goto fail;
     }

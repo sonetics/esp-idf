@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2018-2023 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2018-2024 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -103,6 +103,7 @@ static esp_ble_adv_params_t adv_params = {
 static char *protocomm_ble_device_name = NULL;
 static uint8_t *protocomm_ble_mfg_data = NULL;
 static size_t protocomm_ble_mfg_data_len;
+static uint8_t *protocomm_ble_addr = NULL;
 
 static void hexdump(const char *msg, uint8_t *buf, int len)
 {
@@ -345,7 +346,13 @@ static void transport_simple_ble_disconnect(esp_gatts_cb_event_t event, esp_gatt
         if (ret != ESP_OK) {
             ESP_LOGE(TAG, "error closing the session after disconnect");
         } else {
-            if (esp_event_post(PROTOCOMM_TRANSPORT_BLE_EVENT, PROTOCOMM_TRANSPORT_BLE_DISCONNECTED, NULL, 0, portMAX_DELAY) != ESP_OK) {
+            protocomm_ble_event_t ble_event = {};
+            /* Assign the event type */
+            ble_event.evt_type = PROTOCOMM_TRANSPORT_BLE_DISCONNECTED;
+            /* Set the Disconnection handle */
+            ble_event.conn_handle = param->disconnect.conn_id;
+
+            if (esp_event_post(PROTOCOMM_TRANSPORT_BLE_EVENT, PROTOCOMM_TRANSPORT_BLE_DISCONNECTED, &ble_event, sizeof(protocomm_ble_event_t), portMAX_DELAY) != ESP_OK) {
                 ESP_LOGE(TAG, "Failed to post transport disconnection event");
             }
         }
@@ -371,7 +378,13 @@ static void transport_simple_ble_connect(esp_gatts_cb_event_t event, esp_gatt_if
         if (ret != ESP_OK) {
             ESP_LOGE(TAG, "error creating the session");
         } else {
-            if (esp_event_post(PROTOCOMM_TRANSPORT_BLE_EVENT, PROTOCOMM_TRANSPORT_BLE_CONNECTED, NULL, 0, portMAX_DELAY) != ESP_OK) {
+            protocomm_ble_event_t ble_event = {};
+            /* Assign the event type */
+            ble_event.evt_type = PROTOCOMM_TRANSPORT_BLE_CONNECTED;
+            /* Set the Connection handle */
+            ble_event.conn_handle = param->connect.conn_id;
+
+            if (esp_event_post(PROTOCOMM_TRANSPORT_BLE_EVENT, PROTOCOMM_TRANSPORT_BLE_CONNECTED, &ble_event, sizeof(protocomm_ble_event_t), portMAX_DELAY) != ESP_OK) {
                 ESP_LOGE(TAG, "Failed to post transport pairing event");
             }
         }
@@ -512,6 +525,10 @@ esp_err_t protocomm_ble_start(protocomm_t *pc, const protocomm_ble_config_t *con
         protocomm_ble_mfg_data_len = config->manufacturer_data_len;
     }
 
+    if (config->ble_addr != NULL) {
+        protocomm_ble_addr = config->ble_addr;
+    }
+
     protoble_internal = (_protocomm_ble_internal_t *) calloc(1, sizeof(_protocomm_ble_internal_t));
     if (protoble_internal == NULL) {
         ESP_LOGE(TAG, "Error allocating internal protocomm structure");
@@ -581,6 +598,10 @@ esp_err_t protocomm_ble_start(protocomm_t *pc, const protocomm_ble_config_t *con
 
     ble_config->ble_bonding = config->ble_bonding;
     ble_config->ble_sm_sc   = config->ble_sm_sc;
+
+    if (config->ble_addr != NULL) {
+        ble_config->ble_addr = protocomm_ble_addr;
+    }
 
     if (ble_config->gatt_db_count == -1) {
         ESP_LOGE(TAG, "Invalid GATT database count");

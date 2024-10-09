@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2023 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2024 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -20,7 +20,8 @@
 #include "nvs_flash.h"
 #include "esp_efuse.h"
 #include "esp_timer.h"
-#include "esp_sleep.h"
+#include "esp_private/esp_sleep_internal.h"
+#include "esp_check.h"
 #include "sdkconfig.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/portmacro.h"
@@ -278,6 +279,10 @@ void esp_phy_enable(esp_phy_modem_t modem)
 #endif
     }
     phy_set_modem_flag(modem);
+#if !CONFIG_IDF_TARGET_ESP32
+    // Immediately track pll when phy enabled.
+    phy_track_pll();
+#endif
 
     _lock_release(&s_phy_access_lock);
 }
@@ -296,6 +301,8 @@ void esp_phy_disable(esp_phy_modem_t modem)
         phy_digital_regs_store();
 #endif
 #if SOC_PM_SUPPORT_PMU_MODEM_STATE && CONFIG_ESP_WIFI_ENHANCED_LIGHT_SLEEP
+        extern void pm_mac_modem_clear_rf_power_state(void);
+        pm_mac_modem_clear_rf_power_state();
         if (sleep_modem_wifi_modem_state_enabled()) {
             sleep_modem_wifi_do_phy_retention(false);
         } else
@@ -309,7 +316,7 @@ void esp_phy_disable(esp_phy_modem_t modem)
 #endif
         }
 #if CONFIG_IDF_TARGET_ESP32
-        // Update WiFi MAC time before disalbe WiFi/BT common peripheral clock
+        // Update WiFi MAC time before disable WiFi/BT common peripheral clock
         phy_update_wifi_mac_time(true, esp_timer_get_time());
 #endif
         // Disable WiFi/BT common peripheral clock. Do not disable clock for hardware RNG
@@ -325,14 +332,18 @@ void IRAM_ATTR esp_wifi_bt_power_domain_on(void)
     _lock_acquire(&s_wifi_bt_pd_controller.lock);
     if (s_wifi_bt_pd_controller.count++ == 0) {
         CLEAR_PERI_REG_MASK(RTC_CNTL_DIG_PWC_REG, RTC_CNTL_WIFI_FORCE_PD);
-
-#if !CONFIG_IDF_TARGET_ESP32
+        esp_rom_delay_us(10);
+        wifi_bt_common_module_enable();
+#if CONFIG_IDF_TARGET_ESP32
+        DPORT_SET_PERI_REG_MASK(DPORT_CORE_RST_EN_REG, MODEM_RESET_FIELD_WHEN_PU);
+        DPORT_CLEAR_PERI_REG_MASK(DPORT_CORE_RST_EN_REG, MODEM_RESET_FIELD_WHEN_PU);
+#else
         // modem reset when power on
         SET_PERI_REG_MASK(SYSCON_WIFI_RST_EN_REG, MODEM_RESET_FIELD_WHEN_PU);
         CLEAR_PERI_REG_MASK(SYSCON_WIFI_RST_EN_REG, MODEM_RESET_FIELD_WHEN_PU);
 #endif
-
         CLEAR_PERI_REG_MASK(RTC_CNTL_DIG_ISO_REG, RTC_CNTL_WIFI_FORCE_ISO);
+        wifi_bt_common_module_disable();
     }
     _lock_release(&s_wifi_bt_pd_controller.lock);
 #endif // !SOC_PMU_SUPPORTED
@@ -404,7 +415,20 @@ static uint8_t s_macbb_backup_mem_ref = 0;
 /* Reference of powering down MAC and BB */
 static bool s_mac_bb_pu = true;
 #elif SOC_PM_MODEM_RETENTION_BY_REGDMA
-static void *s_mac_bb_tx_base = NULL;
+static esp_err_t sleep_retention_wifi_bb_init(void *arg)
+{
+    const static sleep_retention_entries_config_t bb_regs_retention[] = {
+        [0] = { .config = REGDMA_LINK_CONTINUOUS_INIT(0x0b00, 0x600a7000, 0x600a7000, 121, 0, 0), .owner = BIT(0) | BIT(1) }, /* AGC */
+        [1] = { .config = REGDMA_LINK_CONTINUOUS_INIT(0x0b01, 0x600a7400, 0x600a7400, 14,  0, 0), .owner = BIT(0) | BIT(1) }, /* TX */
+        [2] = { .config = REGDMA_LINK_CONTINUOUS_INIT(0x0b02, 0x600a7800, 0x600a7800, 136, 0, 0), .owner = BIT(0) | BIT(1) }, /* NRX */
+        [3] = { .config = REGDMA_LINK_CONTINUOUS_INIT(0x0b03, 0x600a7c00, 0x600a7c00, 53,  0, 0), .owner = BIT(0) | BIT(1) }, /* BB */
+        [4] = { .config = REGDMA_LINK_CONTINUOUS_INIT(0x0b05, 0x600a0000, 0x600a0000, 58,  0, 0), .owner = BIT(0) | BIT(1) }  /* FE COEX */
+    };
+    esp_err_t err = sleep_retention_entries_create(bb_regs_retention, ARRAY_SIZE(bb_regs_retention), 3, SLEEP_RETENTION_MODULE_WIFI_BB);
+    ESP_RETURN_ON_ERROR(err, TAG, "failed to allocate memory for modem (%s) retention", "WiFi BB");
+    ESP_LOGD(TAG, "WiFi BB sleep retention initialization");
+    return ESP_OK;
+}
 #endif // SOC_PM_MODEM_RETENTION_BY_BACKUPDMA
 
 void esp_mac_bb_pd_mem_init(void)
@@ -417,22 +441,18 @@ void esp_mac_bb_pd_mem_init(void)
     }
     _lock_release(&s_phy_access_lock);
 #elif SOC_PM_MODEM_RETENTION_BY_REGDMA
-    const static sleep_retention_entries_config_t bb_regs_retention[] = {
-        [0] = { .config = REGDMA_LINK_CONTINUOUS_INIT(0x0b00, 0x600a7000, 0x600a7000, 121, 0, 0), .owner = BIT(0) | BIT(1) }, /* AGC */
-        [1] = { .config = REGDMA_LINK_CONTINUOUS_INIT(0x0b01, 0x600a7400, 0x600a7400, 14,  0, 0), .owner = BIT(0) | BIT(1) }, /* TX */
-        [2] = { .config = REGDMA_LINK_CONTINUOUS_INIT(0x0b02, 0x600a7800, 0x600a7800, 136, 0, 0), .owner = BIT(0) | BIT(1) }, /* NRX */
-        [3] = { .config = REGDMA_LINK_CONTINUOUS_INIT(0x0b03, 0x600a7c00, 0x600a7c00, 53,  0, 0), .owner = BIT(0) | BIT(1) }, /* BB */
-        [4] = { .config = REGDMA_LINK_CONTINUOUS_INIT(0x0b05, 0x600a0000, 0x600a0000, 58,  0, 0), .owner = BIT(0) | BIT(1) }  /* FE COEX */
+    sleep_retention_module_init_param_t init_param = {
+        .cbs     = { .create = { .handle = sleep_retention_wifi_bb_init, .arg = NULL } },
+        .depends = BIT(SLEEP_RETENTION_MODULE_CLOCK_MODEM)
     };
-    esp_err_t err = ESP_OK;
-    _lock_acquire(&s_phy_access_lock);
-    s_mac_bb_tx_base = sleep_retention_find_link_by_id(0x0b01);
-    if (s_mac_bb_tx_base == NULL) {
-        err = sleep_retention_entries_create(bb_regs_retention, ARRAY_SIZE(bb_regs_retention), 3, SLEEP_RETENTION_MODULE_WIFI_BB);
-    }
-    _lock_release(&s_phy_access_lock);
+    esp_err_t err = sleep_retention_module_init(SLEEP_RETENTION_MODULE_WIFI_BB, &init_param);
     if (err != ESP_OK) {
-        ESP_LOGW(TAG, "failed to allocate memory for WiFi baseband retention");
+        ESP_LOGW(TAG, "WiFi BB sleep retention init failed");
+        return;
+    }
+    err = sleep_retention_module_allocate(SLEEP_RETENTION_MODULE_WIFI_BB);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "failed to allocate sleep retention linked list for wifi bb retention");
     }
 #endif
 }
@@ -448,10 +468,15 @@ void esp_mac_bb_pd_mem_deinit(void)
     }
     _lock_release(&s_phy_access_lock);
 #elif SOC_PM_MODEM_RETENTION_BY_REGDMA
-    _lock_acquire(&s_phy_access_lock);
-    sleep_retention_entries_destroy(SLEEP_RETENTION_MODULE_WIFI_BB);
-    s_mac_bb_tx_base = NULL;
-    _lock_release(&s_phy_access_lock);
+    esp_err_t err = sleep_retention_module_free(SLEEP_RETENTION_MODULE_WIFI_BB);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "failed to free sleep retention linked list for wifi bb retention");
+        return;
+    }
+    err = sleep_retention_module_deinit(SLEEP_RETENTION_MODULE_WIFI_BB);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "WiFi BB sleep retention deinit failed");
+    }
 #endif
 }
 
@@ -777,7 +802,7 @@ void esp_phy_load_cal_and_init(void)
     // Set PHY whether in combo module
     // For comode mode, phy enable will be not in WiFi RX state
 #if SOC_PHY_COMBO_MODULE
-    phy_init_param_set(0);
+    phy_init_param_set(1);
 #endif
 
     esp_phy_calibration_data_t* cal_data =
@@ -835,8 +860,7 @@ void esp_phy_load_cal_and_init(void)
         ESP_LOGW(TAG, "saving new calibration data because of checksum failure, mode(%d)", calibration_mode);
     }
 
-    if ((calibration_mode != PHY_RF_CAL_NONE && err != ESP_OK) ||
-            (calibration_mode != PHY_RF_CAL_FULL && ret == ESP_CAL_DATA_CHECK_FAIL)) {
+    if ((calibration_mode != PHY_RF_CAL_NONE) && ((err != ESP_OK) || (ret == ESP_CAL_DATA_CHECK_FAIL))) {
         err = esp_phy_store_cal_data_to_nvs(cal_data);
     } else {
         err = ESP_OK;
@@ -857,9 +881,9 @@ void esp_phy_load_cal_and_init(void)
     esp_phy_release_init_data(init_data);
 #endif
 
-    ESP_ERROR_CHECK(esp_deep_sleep_register_hook(&phy_close_rf));
+    ESP_ERROR_CHECK(esp_deep_sleep_register_phy_hook(&phy_close_rf));
 #if !CONFIG_IDF_TARGET_ESP32
-    ESP_ERROR_CHECK(esp_deep_sleep_register_hook(&phy_xpd_tsens));
+    ESP_ERROR_CHECK(esp_deep_sleep_register_phy_hook(&phy_xpd_tsens));
 #endif
 
     free(cal_data); // PHY maintains a copy of calibration data, so we can free this
@@ -895,7 +919,7 @@ static uint8_t phy_find_bin_type_according_country(const char* country)
 
     if (i == sizeof(s_country_code_map_type_table)/sizeof(phy_country_to_bin_type_t)) {
         phy_init_data_type = ESP_PHY_INIT_DATA_TYPE_DEFAULT;
-        ESP_LOGW(TAG, "Use the default certification code beacuse %c%c doesn't have a certificate", country[0], country[1]);
+        ESP_LOGW(TAG, "Use the default certification code because %c%c doesn't have a certificate", country[0], country[1]);
     }
 
     return phy_init_data_type;

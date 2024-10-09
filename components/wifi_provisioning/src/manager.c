@@ -802,6 +802,7 @@ static esp_err_t update_wifi_scan_results(void)
     prov_ctx->ap_list[curr_channel] = (wifi_ap_record_t *) calloc(get_count, sizeof(wifi_ap_record_t));
     if (!prov_ctx->ap_list[curr_channel]) {
         ESP_LOGE(TAG, "Failed to allocate memory for AP list");
+        esp_wifi_clear_ap_list();
         goto exit;
     }
     if (esp_wifi_scan_get_ap_records(&get_count, prov_ctx->ap_list[curr_channel]) != ESP_OK) {
@@ -950,7 +951,6 @@ static void wifi_prov_mgr_event_handler_internal(
 
         /* Set code corresponding to the reason for disconnection */
         switch (disconnected->reason) {
-        case WIFI_REASON_AUTH_EXPIRE:
         case WIFI_REASON_4WAY_HANDSHAKE_TIMEOUT:
         case WIFI_REASON_AUTH_FAIL:
         case WIFI_REASON_HANDSHAKE_TIMEOUT:

@@ -1,11 +1,12 @@
 /*
- * SPDX-FileCopyrightText: 2015-2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2023 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 
 #include <stdlib.h>
 #include <string.h>
+#include "esp_check.h"
 #include "esp_log.h"
 #include "esp_vfs.h"
 #include "esp_vfs_fat.h"
@@ -134,7 +135,7 @@ static esp_err_t s_f_mount(sdmmc_card_t *card, FATFS *fs, const char *drv, uint8
         }
 
         ESP_LOGW(TAG, "mounting again");
-        res = f_mount(fs, drv, 0);
+        res = f_mount(fs, drv, 1);
         if (res != FR_OK) {
             err = ESP_FAIL;
             ESP_LOGD(TAG, "f_mount failed after formatting (%d)", res);
@@ -461,15 +462,19 @@ esp_err_t esp_vfs_fat_sdcard_format(const char *base_path, sdmmc_card_t *card)
         return ESP_ERR_INVALID_STATE;
     }
 
+    //unmount
+    char drv[3] = {(char)('0' + pdrv), ':', 0};
+    FRESULT res = f_mount(0, drv, 0);
+    if (res != FR_OK) {
+        ESP_LOGE(TAG, "f_mount unmount failed (%d)", res);
+        return ESP_FAIL;
+    }
+
     const size_t workbuf_size = 4096;
     void *workbuf = ff_memalloc(workbuf_size);
     if (workbuf == NULL) {
         return ESP_ERR_NO_MEM;
     }
-
-    //unmount
-    char drv[3] = {(char)('0' + pdrv), ':', 0};
-    f_mount(0, drv, 0);
 
     //format
     uint32_t id = FF_VOLUMES;
@@ -480,7 +485,7 @@ esp_err_t esp_vfs_fat_sdcard_format(const char *base_path, sdmmc_card_t *card)
                 s_ctx[id]->mount_config.allocation_unit_size);
     ESP_LOGI(TAG, "Formatting card, allocation unit size=%d", alloc_unit_size);
     const MKFS_PARM opt = {(BYTE)FM_ANY, 0, 0, 0, alloc_unit_size};
-    FRESULT res = f_mkfs(drv, &opt, workbuf, workbuf_size);
+    res = f_mkfs(drv, &opt, workbuf, workbuf_size);
     free(workbuf);
     if (res != FR_OK) {
         ret = ESP_FAIL;

@@ -166,12 +166,9 @@ typedef uint32_t TickType_t;
 BaseType_t xPortInIsrContext(void);
 
 /**
- * @brief Asserts if in ISR context
+ * @brief Assert if in ISR context
  *
  * - Asserts on xPortInIsrContext() internally
- *
- * @note [refactor-todo] Check if this API is still required
- * @note [refactor-todo] Check if this should be inlined
  */
 void vPortAssertIfInISR(void);
 
@@ -197,7 +194,7 @@ BaseType_t xPortInterruptedFromISRContext(void);
 static inline UBaseType_t xPortSetInterruptMaskFromISR(void);
 
 /**
- * @brief Reenable interrupts in a nested manner (meant to be called from ISRs)
+ * @brief Re-enable interrupts in a nested manner (meant to be called from ISRs)
  *
  * @warning Only applies to current CPU.
  * @param prev_level Previous interrupt level
@@ -431,6 +428,9 @@ FORCE_INLINE_ATTR BaseType_t xPortGetCoreID(void);
 #define portSET_INTERRUPT_MASK_FROM_ISR()                   xPortSetInterruptMaskFromISR()
 #define portCLEAR_INTERRUPT_MASK_FROM_ISR(prev_level)       vPortClearInterruptMaskFromISR(prev_level)
 
+/**
+ * @brief Assert if in ISR context
+ */
 #define portASSERT_IF_IN_ISR() vPortAssertIfInISR()
 
 /**
@@ -464,7 +464,7 @@ FORCE_INLINE_ATTR BaseType_t xPortGetCoreID(void);
 #define portENTER_CRITICAL_ISR(mux)                 vPortEnterCritical(mux)
 #define portEXIT_CRITICAL_ISR(mux)                  vPortExitCritical(mux)
 
-#define portTRY_ENTER_CRITICAL_SAFE(mux, timeout)   xPortEnterCriticalTimeoutSafe(mux)
+#define portTRY_ENTER_CRITICAL_SAFE(mux, timeout)   xPortEnterCriticalTimeoutSafe(mux, timeout)
 #define portENTER_CRITICAL_SAFE(mux)                vPortEnterCriticalSafe(mux)
 #define portEXIT_CRITICAL_SAFE(mux)                 vPortExitCriticalSafe(mux)
 

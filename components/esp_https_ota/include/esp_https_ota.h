@@ -62,6 +62,7 @@ typedef struct {
 #if CONFIG_ESP_HTTPS_OTA_DECRYPT_CB
     decrypt_cb_t decrypt_cb;                       /*!< Callback for external decryption layer */
     void *decrypt_user_ctx;                        /*!< User context for external decryption layer */
+    uint16_t enc_img_header_size;                  /*!< Header size of pre-encrypted ota image header */
 #endif
 } esp_https_ota_config_t;
 
@@ -232,6 +233,21 @@ esp_err_t esp_https_ota_get_img_desc(esp_https_ota_handle_t https_ota_handle, es
 *    - total bytes read so far
 */
 int esp_https_ota_get_image_len_read(esp_https_ota_handle_t https_ota_handle);
+
+
+/**
+ * @brief  This function returns the HTTP status code of the last HTTP response.
+ *
+ * @note   This API should be called only after esp_https_ota_begin() has been called.
+ *         This can be used to check the HTTP status code of the OTA download process.
+ *
+ * @param[in]   https_ota_handle   pointer to esp_https_ota_handle_t structure
+ *
+ * @return
+ *    - -1    On failure
+ *    - HTTP status code
+ */
+int esp_https_ota_get_status_code(esp_https_ota_handle_t https_ota_handle);
 
 
 /**

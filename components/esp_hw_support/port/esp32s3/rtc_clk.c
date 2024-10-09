@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2023 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2024 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -12,6 +12,7 @@
 #include "sdkconfig.h"
 #include "esp32s3/rom/rtc.h"
 #include "soc/rtc.h"
+#include "soc/io_mux_reg.h"
 #include "esp_private/rtc_clk.h"
 #include "soc/rtc_io_reg.h"
 #include "esp_rom_sys.h"
@@ -20,6 +21,7 @@
 #include "hal/regi2c_ctrl_ll.h"
 #include "esp_private/regi2c_ctrl.h"
 #include "soc/regi2c_dig_reg.h"
+#include "soc/sens_reg.h"
 #include "sdkconfig.h"
 
 static const char *TAG = "rtc_clk";
@@ -62,8 +64,9 @@ void rtc_clk_32k_enable(bool enable)
 
 void rtc_clk_32k_enable_external(void)
 {
-    SET_PERI_REG_MASK(RTC_IO_XTAL_32P_PAD_REG, RTC_IO_X32P_MUX_SEL);
-    SET_PERI_REG_MASK(RTC_IO_XTAL_32N_PAD_REG, RTC_IO_X32N_MUX_SEL);
+    PIN_INPUT_ENABLE(IO_MUX_GPIO15_REG);
+    SET_PERI_REG_MASK(SENS_SAR_PERI_CLK_GATE_CONF_REG, SENS_IOMUX_CLK_EN);
+    SET_PERI_REG_MASK(RTC_CNTL_PAD_HOLD_REG, RTC_CNTL_X32P_HOLD);
     clk_ll_xtal32k_enable(CLK_LL_XTAL32K_ENABLE_MODE_EXTERNAL);
 }
 
@@ -172,6 +175,7 @@ static void rtc_clk_bbpll_configure(rtc_xtal_freq_t xtal_freq, int pll_freq)
     clk_ll_bbpll_set_config(pll_freq, xtal_freq);
     /* WAIT CALIBRATION DONE */
     while(!regi2c_ctrl_ll_bbpll_calibration_is_done());
+    esp_rom_delay_us(10);
     /* BBPLL CALIBRATION STOP */
     regi2c_ctrl_ll_bbpll_calibration_stop();
 
@@ -185,7 +189,7 @@ static void rtc_clk_bbpll_configure(rtc_xtal_freq_t xtal_freq, int pll_freq)
  */
 static void rtc_clk_cpu_freq_to_pll_mhz(int cpu_freq_mhz)
 {
-    /* There are totally 6 LDO slaves(all on by default). At the moment of swithing LDO slave, LDO voltage will also change instantaneously.
+    /* There are totally 6 LDO slaves(all on by default). At the moment of switching LDO slave, LDO voltage will also change instantaneously.
      * LDO slave can reduce the voltage change caused by switching frequency.
      * CPU frequency <= 40M : just open 3 LDO slaves; CPU frequency = 80M : open 4 LDO slaves; CPU frequency = 160M : open 5 LDO slaves; CPU frequency = 240M : open 6 LDO slaves;
      *

@@ -1,8 +1,6 @@
-# SPDX-FileCopyrightText: 2021-2022 Espressif Systems (Shanghai) CO LTD
+# SPDX-FileCopyrightText: 2021-2024 Espressif Systems (Shanghai) CO LTD
 # SPDX-License-Identifier: Apache-2.0
-
 # pylint: disable=W0621  # redefined-outer-name
-
 # This file is a pytest root configuration file and provide the following functionalities:
 # 1. Defines a few fixtures that could be used under the whole project.
 # 2. Defines a few hook functions.
@@ -12,18 +10,20 @@
 #
 # This is an experimental feature, and if you found any bug or have any question, please report to
 # https://github.com/espressif/pytest-embedded/issues
-
 import logging
 import os
 import re
 import sys
 import xml.etree.ElementTree as ET
-from datetime import datetime
 from fnmatch import fnmatch
-from typing import Callable, List, Optional, Tuple
+from typing import Callable
+from typing import List
+from typing import Optional
+from typing import Tuple
 
 import pytest
-from _pytest.config import Config, ExitCode
+from _pytest.config import Config
+from _pytest.config import ExitCode
 from _pytest.fixtures import FixtureRequest
 from _pytest.main import Session
 from _pytest.nodes import Item
@@ -31,7 +31,8 @@ from _pytest.python import Function
 from _pytest.reports import TestReport
 from _pytest.runner import CallInfo
 from _pytest.terminal import TerminalReporter
-from pytest_embedded.plugin import multi_dut_argument, multi_dut_fixture
+from pytest_embedded.plugin import multi_dut_argument
+from pytest_embedded.plugin import multi_dut_fixture
 from pytest_embedded.utils import find_by_suffix
 from pytest_embedded_idf.dut import IdfDut
 
@@ -79,8 +80,14 @@ ENV_MARKERS = {
     # single-dut markers
     'generic': 'tests should be run on generic runners',
     'flash_suspend': 'support flash suspend feature',
-    'ip101': 'connected via wired 10/100M ethernet',
-    'lan8720': 'connected via LAN8720 ethernet transceiver',
+    'eth_ip101': 'connected via wired 10/100M ethernet',
+    'eth_lan8720': 'connected via LAN8720 ethernet transceiver',
+    'eth_rtl8201': 'connected via RTL8201 ethernet transceiver',
+    'eth_ksz8041': 'connected via KSZ8041 ethernet transceiver',
+    'eth_dp83848': 'connected via DP83848 ethernet transceiver',
+    'eth_w5500': 'SPI Ethernet module with two W5500',
+    'eth_ksz8851snl': 'SPI Ethernet module with two KSZ8851SNL',
+    'eth_dm9051': 'SPI Ethernet module with two DM9051',
     'quad_psram': 'runners with quad psram',
     'octal_psram': 'runners with octal psram',
     'usb_host': 'usb host runners',
@@ -127,10 +134,12 @@ ENV_MARKERS = {
     # multi-dut markers
     'ieee802154': 'ieee802154 related tests should run on ieee802154 runners.',
     'openthread_br': 'tests should be used for openthread border router.',
+    'openthread_sleep': 'tests should be used for openthread sleepy device.',
     'wifi_two_dut': 'tests should be run on runners which has two wifi duts connected.',
     'generic_multi_device': 'generic multiple devices whose corresponding gpio pins are connected to each other.',
     'twai_network': 'multiple runners form a TWAI network.',
     'sdio_master_slave': 'Test sdio multi board.',
+    'usj_device': 'Test usb_serial_jtag and usb_serial_jtag is used as serial only (not console)',
 }
 
 
@@ -173,7 +182,7 @@ def item_skip_targets(item: Item) -> List[str]:
         # temp markers should always use keyword arguments `targets` and `reason`
         if not temp_marker.kwargs.get('targets') or not temp_marker.kwargs.get('reason'):
             raise ValueError(
-                f'`{marker_name}` should always use keyword arguments `targets` and `reason`. '
+                f'`{marker_name}` should always use keyword arguments `targets` and `reason`. '  # noqa
                 f'For example: '
                 f'`@pytest.mark.{marker_name}(targets=["esp32"], reason="IDF-xxxx, will fix it ASAP")`'
             )
@@ -217,15 +226,10 @@ def idf_path() -> str:
     return os.path.dirname(__file__)
 
 
-@pytest.fixture(scope='session', autouse=True)
-def session_tempdir() -> str:
-    _tmpdir = os.path.join(
-        os.path.dirname(__file__),
-        'pytest_embedded_log',
-        datetime.now().strftime('%Y-%m-%d_%H-%M-%S'),
-    )
-    os.makedirs(_tmpdir, exist_ok=True)
-    return _tmpdir
+@pytest.fixture(scope='session')
+def session_root_logdir(idf_path: str) -> str:
+    """Session scoped log dir for pytest-embedded"""
+    return idf_path
 
 
 @pytest.fixture
@@ -298,6 +302,11 @@ def junit_properties(test_case_name: str, record_xml_attribute: Callable[[str, o
     This fixture is autoused and will modify the junit report test case name to <target>.<config>.<case_name>
     """
     record_xml_attribute('name', test_case_name)
+
+
+@pytest.fixture(autouse=True)
+def set_test_case_name(request: FixtureRequest, test_case_name: str) -> None:
+    request.node.funcargs['test_case_name'] = test_case_name
 
 
 ######################

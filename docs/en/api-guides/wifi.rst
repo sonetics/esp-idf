@@ -3,6 +3,10 @@ Wi-Fi Driver
 
 :link_to_translation:`zh_CN:[中文]`
 
+{IDF_TARGET_MAX_CONN_STA_NUM:default="15", esp32c2="4", esp32c3="10", esp32c6="10"}
+
+{IDF_TARGET_SUB_MAX_NUM_FROM_KEYS:default="2", esp32c3="7", esp32c6="7"}
+
 {IDF_TARGET_NAME} Wi-Fi Feature List
 ------------------------------------
 The following features are supported:
@@ -1286,33 +1290,7 @@ AP Basic Configuration
 
 API :cpp:func:`esp_wifi_set_config()` can be used to configure the AP. And the configuration will be stored in NVS. The table below describes the fields in detail.
 
-.. only:: esp32 or esp32s2 or esp32s3
-
-    .. list-table::
-      :header-rows: 1
-      :widths: 15 55
-
-      * - Field
-        - Description
-      * - ssid
-        - SSID of AP; if the ssid[0] is 0xFF and ssid[1] is 0xFF, the AP defaults the SSID to ESP_aabbcc, where “aabbcc” is the last three bytes of the AP MAC.
-      * - password
-        - Password of AP; if the auth mode is WIFI_AUTH_OPEN, this field will be ignored.
-      * - ssid_len
-        - Length of SSID; if ssid_len is 0, check the SSID until there is a termination character. If ssid_len > 32, change it to 32; otherwise, set the SSID length according to ssid_len.
-      * - channel
-        - Channel of AP; if the channel is out of range, the Wi-Fi driver defaults to channel 1. So, please make sure the channel is within the required range. For more details, refer to `Wi-Fi Country Code`_.
-      * - authmode
-        - Auth mode of ESP AP; currently, ESP AP does not support AUTH_WEP. If the authmode is an invalid value, AP defaults the value to WIFI_AUTH_OPEN.
-      * - ssid_hidden
-        - If ssid_hidden is 1, AP does not broadcast the SSID; otherwise, it does broadcast the SSID.
-      * - max_connection
-        - The max number of stations allowed to connect in, the default value is 10. ESP Wi-Fi supports up to 15 (ESP_WIFI_MAX_CONN_NUM) Wi-Fi connections. Please note that ESP AP and ESP-NOW share the same encryption hardware keys, so the max_connection parameter will be affected by the :ref:`CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM`. The total number of encryption hardware keys is 17, if :ref:`CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM` <= 2, the max_connection can be set up to 15, otherwise the max_connection can be set up to (17 - :ref:`CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM`).
-      * - beacon_interval
-        - Beacon interval; the value is 100 ~ 60000 ms, with default value being 100 ms. If the value is out of range, AP defaults it to 100 ms.
-
-
-.. only:: esp32c3 or esp32c6
+.. only:: esp32 or esp32s2 or esp32s3 or esp32c3 or esp32c6
 
     .. list-table::
       :header-rows: 1
@@ -1333,7 +1311,7 @@ API :cpp:func:`esp_wifi_set_config()` can be used to configure the AP. And the c
       * - ssid_hidden
         - If ssid_hidden is 1, AP does not broadcast the SSID; otherwise, it does broadcast the SSID.
       * - max_connection
-        - The max number of stations allowed to connect in, the default value is 10. ESP Wi-Fi supports up to 10 (``ESP_WIFI_MAX_CONN_NUM``) Wi-Fi connections. Please note that ESP AP and ESP-NOW share the same encryption hardware keys, so the max_connection parameter will be affected by the :ref:`CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM`. The total number of encryption hardware keys is 17, if :ref:`CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM` <= 7, the max_connection can be set up to 10, otherwise the max_connection can be set up to (17 - :ref:`CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM`).
+        - The max number of stations allowed to connect in, the default value is 10. ESP Wi-Fi supports up to {IDF_TARGET_MAX_CONN_STA_NUM} (ESP_WIFI_MAX_CONN_NUM) Wi-Fi connections. Please note that ESP AP and ESP-NOW share the same encryption hardware keys, so the max_connection parameter will be affected by the :ref:`CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM`. The total number of encryption hardware keys is 17, if :ref:`CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM` <= {IDF_TARGET_SUB_MAX_NUM_FROM_KEYS}, the max_connection can be set up to {IDF_TARGET_MAX_CONN_STA_NUM}, otherwise the max_connection can be set up to (17 - :ref:`CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM`).
       * - beacon_interval
         - Beacon interval; the value is 100 ~ 60000 ms, with default value being 100 ms. If the value is out of range, AP defaults it to 100 ms.
 
@@ -1359,7 +1337,7 @@ API :cpp:func:`esp_wifi_set_config()` can be used to configure the AP. And the c
       * - ssid_hidden
         - If ssid_hidden is 1, AP does not broadcast the SSID; otherwise, it does broadcast the SSID.
       * - max_connection
-        - The max number of stations allowed to connect in, the default value is 2. ESP Wi-Fi supports up to 4 (``ESP_WIFI_MAX_CONN_NUM``) Wi-Fi connections. Please note that ESP AP and ESP-NOW share the same encryption hardware keys, so the max_connection parameter will be affected by the :ref:`CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM`. The total number of encryption hardware keys is 4, the max_connection can be set up to (4 - :ref:`CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM`).
+        - The max number of stations allowed to connect in, the default value is 2. ESP Wi-Fi supports up to {IDF_TARGET_MAX_CONN_STA_NUM} (ESP_WIFI_MAX_CONN_NUM) Wi-Fi connections. Please note that ESP AP and ESP-NOW share the same encryption hardware keys, so the max_connection parameter will be affected by the :ref:`CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM`. The total number of encryption hardware keys is {IDF_TARGET_MAX_CONN_STA_NUM}, the max_connection can be set up to ({IDF_TARGET_MAX_CONN_STA_NUM} - :ref:`CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM`).
       * - beacon_interval
         - Beacon interval; the value is 100 ~ 60000 ms, with default value being 100 ms. If the value is out of range, AP defaults it to 100 ms.
 
@@ -1477,7 +1455,7 @@ Currently, the ESP-IDF supports the following protocol modes:
         +-------+-----+----+---+-------+------+-----+----+
         | LR    | -   | -  | - | LR    | LR   | LR  | LR |
         +-------+-----+----+---+-------+------+-----+----+
-    
+
     .. only:: esp32c6
 
         +---------+-------+-----+----+---+---------+-------+------+-----+----+
@@ -1735,12 +1713,20 @@ A config option :ref:`CONFIG_ESP_WIFI_11R_SUPPORT` and configuration parameter :
     - {IDF_TARGET_NAME} as FTM Initiator in station mode.
     - {IDF_TARGET_NAME} as FTM Responder in AP mode.
 
-    Distance measurement using RTT is not accurate, and factors such as RF interference, multi-path travel, antenna orientation, and lack of calibration increase these inaccuracies. For better results, it is suggested to perform FTM between two ESP32 chip series devices (except ESP32-C2) as station and AP.
+.. only:: esp32c6
+
+   {IDF_TARGET_NAME} ECO1 and older versions do not support FTM Initiator mode.
+
+.. attention::
+
+    Distance measurement using RTT is not accurate, and factors such as RF interference, multi-path travel, antenna orientation, and lack of calibration increase these inaccuracies. For better results, it is suggested to perform FTM between two ESP32 chip series devices as station and AP.
 
     Refer to ESP-IDF example :idf_file:`examples/wifi/ftm/README.md` for steps on how to set up and perform FTM.
 
 {IDF_TARGET_NAME} Wi-Fi Power-saving Mode
 -----------------------------------------
+
+This subsection will briefly introduce the concepts and usage related to Wi-Fi Power Saving Mode, for a more detailed introduction please refer to the :doc:`Low Power Mode User Guide <../api-guides/low-power-mode>`
 
 Station Sleep
 ++++++++++++++++++++++
@@ -2149,7 +2135,7 @@ The following packets will **NOT** be dumped to the application:
 
  - Other 802.11 error frames.
 
-For frames that the sniffer **can** dump, the application can additionally decide which specific type of packets can be filtered to the application by using :cpp:func:`esp_wifi_set_promiscuous_filter()` and :cpp:func:`esp_wifi_set_promiscuous_ctrl_filter()`. By default, it will filter all 802.11 data and management frames to the application.
+For frames that the sniffer **can** dump, the application can additionally decide which specific type of packets can be filtered to the application by using :cpp:func:`esp_wifi_set_promiscuous_filter()` and :cpp:func:`esp_wifi_set_promiscuous_ctrl_filter()`. By default, it will filter all 802.11 data and management frames to the application. If you want to filter the 802.11 control frames, the filter parameter in :cpp:func:`esp_wifi_set_promiscuous_filter()` should include `WIFI_PROMIS_FILTER_MASK_CTRL` type, and if you want to differentiate control frames further, then call :cpp:func:`esp_wifi_set_promiscuous_ctrl_filter()`.
 
 The Wi-Fi sniffer mode can be enabled in the Wi-Fi mode of :cpp:enumerator:`WIFI_MODE_NULL`, :cpp:enumerator:`WIFI_MODE_STA`, :cpp:enumerator:`WIFI_MODE_AP`, or :cpp:enumerator:`WIFI_MODE_APSTA`. In other words, the sniffer mode is active when the station is connected to the AP, or when the AP has a Wi-Fi connection. Please note that the sniffer has a **great impact** on the throughput of the station or AP Wi-Fi connection. Generally, the sniffer should be enabled **only if** the station/AP Wi-Fi connection does not experience heavy traffic.
 
@@ -2605,29 +2591,29 @@ The parameters not mentioned in the following table should be set to the default
           - 12
           - 8
         * - WIFI_IRAM_OPT
-          - 15
-          - 15
-          - 15
-          - 15
-          - 15
-          - 15
-          - 15
+          - ENABLE
+          - ENABLE
+          - ENABLE
+          - ENABLE
+          - ENABLE
+          - ENABLE
+          - ENABLE
         * - WIFI_RX_IRAM_OPT
-          - 16
-          - 16
-          - 16
-          - 16
-          - 16
-          - 16
-          - 16
+          - ENABLE
+          - ENABLE
+          - ENABLE
+          - ENABLE
+          - ENABLE
+          - ENABLE
+          - ENABLE
         * - LWIP_IRAM_OPTIMIZATION
-          - 13
-          - 13
-          - 13
-          - 13
-          - 13
-          - 13
-          - 13
+          - ENABLE
+          - ENABLE
+          - ENABLE
+          - ENABLE
+          - ENABLE
+          - ENABLE
+          - ENABLE
         * - TCP TX throughput (Mbit/s)
           - 74.6
           - 50.8
@@ -2717,23 +2703,23 @@ The parameters not mentioned in the following table should be set to the default
           - 8
           - 6
         * - WIFI_IRAM_OPT
-          - 15
-          - 15
-          - 15
-          - 15
-          - 0
+          - ENABLE
+          - ENABLE
+          - ENABLE
+          - ENABLE
+          - DISABLE
         * - WIFI_RX_IRAM_OPT
-          - 16
-          - 16
-          - 16
-          - 0
-          - 0
+          - ENABLE
+          - ENABLE
+          - ENABLE
+          - DISABLE
+          - DISABLE
         * - LWIP_IRAM_OPTIMIZATION
-          - 13
-          - 13
-          - 0
-          - 0
-          - 0
+          - ENABLE
+          - ENABLE
+          - DISABLE
+          - DISABLE
+          - DISABLE
         * - INSTRUCTION_CACHE
           - 16
           - 16
@@ -2810,9 +2796,9 @@ The parameters not mentioned in the following table should be set to the default
           - 16
           - 6
         * - LWIP_IRAM_OPTIMIZATION
-          - 13
-          - 13
-          - 0
+          - ENABLE
+          - ENABLE
+          - DISABLE
         * - TCP TX throughput (Mbit/s)
           - 38.1
           - 27.2
@@ -2869,9 +2855,9 @@ The parameters not mentioned in the following table should be set to the default
           - 16
           - 6
         * - LWIP_IRAM_OPTIMIZATION
-          - 13
-          - 13
-          - 0
+          - ENABLE
+          - ENABLE
+          - DISABLE
         * - TCP TX throughput (Mbit/s)
           - 30.5
           - 25.9
@@ -2928,9 +2914,9 @@ The parameters not mentioned in the following table should be set to the default
           - 14
           - 6
         * - LWIP_IRAM_OPTIMIZATION
-          - 13
-          - 13
-          - 0
+          - ENABLE
+          - ENABLE
+          - DISABLE
         * - TCP TX throughput (Mbit/s)
           - 21.6
           - 21.4
@@ -2987,17 +2973,17 @@ The parameters not mentioned in the following table should be set to the default
           - 32
           - 6
         * - WIFI_IRAM_OPT
-          - 15
-          - 15
-          - 15
+          - ENABLE
+          - ENABLE
+          - ENABLE
         * - WIFI_RX_IRAM_OPT
-          - 16
-          - 16
-          - 16
+          - ENABLE
+          - ENABLE
+          - ENABLE
         * - LWIP_IRAM_OPTIMIZATION
-          - 13
-          - 13
-          - 0
+          - ENABLE
+          - ENABLE
+          - DISABLE
         * - INSTRUCTION_CACHE
           - 32
           - 32
@@ -3163,20 +3149,20 @@ The parameters not mentioned in the following table should be set to the default
                - 65
                - 65
              * - WIFI_IRAM_OPT
-               - 15
-               - 15
-               - 15
-               - 0
+               - ENABLE
+               - ENABLE
+               - ENABLE
+               - DISABLE
              * - WIFI_RX_IRAM_OPT
-               - 16
-               - 16
-               - 0
-               - 0
+               - ENABLE
+               - ENABLE
+               - DISABLE
+               - DISABLE
              * - LWIP_IRAM_OPTIMIZATION
-               - 13
-               - 0
-               - 0
-               - 0
+               - ENABLE
+               - DISABLE
+               - DISABLE
+               - DISABLE
              * - TCP TX throughput (Mbit/s)
                - 37.5
                - 31.7
@@ -3245,20 +3231,20 @@ The parameters not mentioned in the following table should be set to the default
                - 32
                - 32
              * - WIFI_IRAM_OPT
-               - 15
-               - 15
-               - 15
-               - 0
+               - ENABLE
+               - ENABLE
+               - ENABLE
+               - DISABLE
              * - WIFI_RX_IRAM_OPT
-               - 16
-               - 16
-               - 0
-               - 0
+               - ENABLE
+               - ENABLE
+               - DISABLE
+               - DISABLE
              * - LWIP_IRAM_OPTIMIZATION
-               - 13
-               - 0
-               - 0
-               - 0
+               - ENABLE
+               - DISABLE
+               - DISABLE
+               - DISABLE
              * - INSTRUCTION_CACHE
                - 16
                - 16
@@ -3352,20 +3338,20 @@ The parameters not mentioned in the following table should be set to the default
                - 32
                - 32
              * - WIFI_IRAM_OPT
-               - 15
-               - 15
-               - 15
-               - 0
+               - ENABLE
+               - ENABLE
+               - ENABLE
+               - DISABLE
              * - WIFI_RX_IRAM_OPT
-               - 16
-               - 16
-               - 0
-               - 0
+               - ENABLE
+               - ENABLE
+               - DISABLE
+               - DISABLE
              * - LWIP_IRAM_OPTIMIZATION
-               - 13
-               - 0
-               - 0
-               - 0
+               - ENABLE
+               - DISABLE
+               - DISABLE
+               - DISABLE
              * - LWIP_UDP_RECVMBOX_SIZE
                - 16
                - 16
@@ -3469,20 +3455,20 @@ The parameters not mentioned in the following table should be set to the default
                - 32
                - 32
              * - WIFI_IRAM_OPT
-               - 15
-               - 15
-               - 15
-               - 0
+               - ENABLE
+               - ENABLE
+               - ENABLE
+               - DISABLE
              * - WIFI_RX_IRAM_OPT
-               - 16
-               - 16
-               - 0
-               - 0
+               - ENABLE
+               - ENABLE
+               - DISABLE
+               - DISABLE
              * - LWIP_IRAM_OPTIMIZATION
-               - 13
-               - 0
-               - 0
-               - 0
+               - ENABLE
+               - DISABLE
+               - DISABLE
+               - DISABLE
              * - LWIP_UDP_RECVMBOX_SIZE
                - 16
                - 16

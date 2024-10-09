@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2022-2023 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2024 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -118,6 +118,8 @@ esp_err_t mcpwm_del_generator(mcpwm_gen_handle_t gen)
     mcpwm_group_t *group = oper->group;
 
     ESP_LOGD(TAG, "del generator (%d,%d,%d)", group->group_id, oper->oper_id, gen->gen_id);
+    // reset GPIO
+    gpio_reset_pin(gen->gen_gpio_num);
     // recycle memory resource
     ESP_RETURN_ON_ERROR(mcpwm_generator_destroy(gen), TAG, "destroy generator failed");
     return ESP_OK;
@@ -255,6 +257,60 @@ esp_err_t mcpwm_generator_set_actions_on_brake_event(mcpwm_gen_handle_t gen, mcp
         ev_act_itor = va_arg(it, mcpwm_gen_brake_event_action_t);
     }
     va_end(it);
+    return ESP_OK;
+}
+
+esp_err_t mcpwm_generator_set_action_on_fault_event(mcpwm_gen_handle_t gen, mcpwm_gen_fault_event_action_t ev_act)
+{
+    ESP_RETURN_ON_FALSE(gen, ESP_ERR_INVALID_ARG, TAG, "invalid argument");
+    mcpwm_fault_t *fault = ev_act.fault;
+    ESP_RETURN_ON_FALSE(fault->type == MCPWM_FAULT_TYPE_GPIO, ESP_ERR_NOT_SUPPORTED, TAG, "not supported fault type");
+    mcpwm_oper_t *oper = gen->oper;
+    mcpwm_group_t *group = oper->group;
+    // check the remained triggers
+    int trigger_id = -1;
+    portENTER_CRITICAL(&oper->spinlock);
+    for (int i = 0; i < SOC_MCPWM_TRIGGERS_PER_OPERATOR; i++) {
+        if (oper->triggers[i] == MCPWM_TRIGGER_NO_ASSIGN) {
+            trigger_id = i;
+            oper->triggers[i] = MCPWM_TRIGGER_GPIO_FAULT;
+            break;
+        }
+    }
+    portEXIT_CRITICAL(&oper->spinlock);
+    ESP_RETURN_ON_FALSE(trigger_id >= 0, ESP_ERR_NOT_FOUND, TAG, "no free trigger in operator (%d,%d)", group->group_id, oper->oper_id);
+    mcpwm_gpio_fault_t *gpio_fault = __containerof(fault, mcpwm_gpio_fault_t, base);
+    mcpwm_ll_operator_set_trigger_from_gpio_fault(group->hal.dev, oper->oper_id, trigger_id, gpio_fault->fault_id);
+    mcpwm_ll_generator_set_action_on_trigger_event(group->hal.dev, oper->oper_id, gen->gen_id,
+            ev_act.direction, trigger_id, ev_act.action);
+    return ESP_OK;
+}
+
+esp_err_t mcpwm_generator_set_action_on_sync_event(mcpwm_gen_handle_t gen, mcpwm_gen_sync_event_action_t ev_act)
+{
+    ESP_RETURN_ON_FALSE(gen, ESP_ERR_INVALID_ARG, TAG, "invalid argument");
+    mcpwm_oper_t *oper = gen->oper;
+    mcpwm_group_t *group = oper->group;
+    // check the remained triggers
+    int trigger_id = -1;
+    int trigger_sync_used = 0;
+    portENTER_CRITICAL(&oper->spinlock);
+    for (int i = 0; i < SOC_MCPWM_TRIGGERS_PER_OPERATOR; i++) {
+        if (oper->triggers[i] == MCPWM_TRIGGER_SYNC_EVENT) {
+            trigger_sync_used = 1;
+            break;
+        } else if (oper->triggers[i] == MCPWM_TRIGGER_NO_ASSIGN) {
+            trigger_id = i;
+            oper->triggers[i] = MCPWM_TRIGGER_SYNC_EVENT;
+            break;
+        }
+    }
+    portEXIT_CRITICAL(&oper->spinlock);
+    ESP_RETURN_ON_FALSE(!trigger_sync_used, ESP_ERR_INVALID_STATE, TAG, "only one sync supported");
+    ESP_RETURN_ON_FALSE(trigger_id >= 0, ESP_ERR_NOT_FOUND, TAG, "no free trigger in operator (%d,%d)", group->group_id, oper->oper_id);
+    mcpwm_ll_operator_set_trigger_from_sync(group->hal.dev, oper->oper_id, trigger_id);
+    mcpwm_ll_generator_set_action_on_trigger_event(group->hal.dev, oper->oper_id, gen->gen_id,
+            ev_act.direction, trigger_id, ev_act.action);
     return ESP_OK;
 }
 
