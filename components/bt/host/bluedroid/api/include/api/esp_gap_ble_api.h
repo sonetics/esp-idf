@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2023 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2024 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -208,6 +208,8 @@ typedef enum {
     ESP_GAP_BLE_PERIODIC_ADV_SET_INFO_TRANS_COMPLETE_EVT,        /*!< when periodic advertising set info transfer complete, the event comes */
     ESP_GAP_BLE_SET_PAST_PARAMS_COMPLETE_EVT,                    /*!< when set periodic advertising sync transfer params complete, the event comes */
     ESP_GAP_BLE_PERIODIC_ADV_SYNC_TRANS_RECV_EVT,                /*!< when periodic advertising sync transfer received, the event comes */
+    // BLE_INCLUDED
+    ESP_GAP_BLE_ADV_CLEAR_COMPLETE_EVT,                          /*!< When clear advertising complete, the event comes */
     ESP_GAP_BLE_EVT_MAX,                                         /*!< when maximum advertising event complete, the event comes */
 } esp_gap_ble_cb_event_t;
 
@@ -417,7 +419,10 @@ typedef enum {
 typedef enum {
     BLE_SCAN_DUPLICATE_DISABLE           = 0x0,  /*!< the Link Layer should generate advertising reports to the host for each packet received */
     BLE_SCAN_DUPLICATE_ENABLE            = 0x1,  /*!< the Link Layer should filter out duplicate advertising reports to the Host */
-    BLE_SCAN_DUPLICATE_MAX               = 0x2,  /*!< 0x02 – 0xFF, Reserved for future use */
+    #if (BLE_50_FEATURE_SUPPORT == TRUE)
+    BLE_SCAN_DUPLICATE_ENABLE_RESET,             /*!< Duplicate filtering enabled, reset for each scan period, only supported in BLE 5.0. */
+    #endif
+    BLE_SCAN_DUPLICATE_MAX                       /*!< Reserved for future use. */
 } esp_ble_scan_duplicate_t;
 #if (BLE_42_FEATURE_SUPPORT == TRUE)
 /// Ble scan parameters
@@ -674,6 +679,8 @@ typedef enum {
     ESP_BLE_DUPLICATE_SCAN_EXCEPTIONAL_INFO_MESH_BEACON_TYPE,    /*!< BLE mesh beacon AD type, the format is | Len | 0x2B | Beacon Type | Beacon Data | */
     ESP_BLE_DUPLICATE_SCAN_EXCEPTIONAL_INFO_MESH_PROV_SRV_ADV,   /*!< BLE mesh provisioning service uuid, the format is | 0x02 | 0x01 | flags | 0x03 | 0x03 | 0x1827 | .... |` */
     ESP_BLE_DUPLICATE_SCAN_EXCEPTIONAL_INFO_MESH_PROXY_SRV_ADV,  /*!< BLE mesh adv with proxy service uuid, the format is | 0x02 | 0x01 | flags | 0x03 | 0x03 | 0x1828 | .... |` */
+    ESP_BLE_DUPLICATE_SCAN_EXCEPTIONAL_INFO_MESH_PROXY_SOLIC_ADV,  /*!< BLE mesh adv with proxy service uuid, the format is | 0x02 | 0x01 | flags | 0x03 | 0x03 | 0x1859 | .... |` */
+    ESP_BLE_DUPLICATE_SCAN_EXCEPTIONAL_INFO_MESH_URI_ADV,        /*!< BLE mesh URI adv, the format is ...| Len | 0x24 | data |... */
 } esp_ble_duplicate_exceptional_info_type_t;
 
 typedef enum {
@@ -681,7 +688,9 @@ typedef enum {
     ESP_BLE_DUPLICATE_SCAN_EXCEPTIONAL_MESH_LINK_ID_LIST          = BLE_BIT(1),             /*!< duplicate scan exceptional mesh link ID list */
     ESP_BLE_DUPLICATE_SCAN_EXCEPTIONAL_MESH_BEACON_TYPE_LIST      = BLE_BIT(2),             /*!< duplicate scan exceptional mesh beacon type list */
     ESP_BLE_DUPLICATE_SCAN_EXCEPTIONAL_MESH_PROV_SRV_ADV_LIST     = BLE_BIT(3),             /*!< duplicate scan exceptional mesh adv with provisioning service uuid */
-    ESP_BLE_DUPLICATE_SCAN_EXCEPTIONAL_MESH_PROXY_SRV_ADV_LIST    = BLE_BIT(4),             /*!< duplicate scan exceptional mesh adv with provisioning service uuid */
+    ESP_BLE_DUPLICATE_SCAN_EXCEPTIONAL_MESH_PROXY_SRV_ADV_LIST    = BLE_BIT(4),             /*!< duplicate scan exceptional mesh adv with proxy service uuid */
+    ESP_BLE_DUPLICATE_SCAN_EXCEPTIONAL_MESH_PROXY_SOLIC_ADV_LIST  = BLE_BIT(5),             /*!< duplicate scan exceptional mesh adv with proxy solicitation PDU uuid */
+    ESP_BLE_DUPLICATE_SCAN_EXCEPTIONAL_MESH_URI_ADV_LIST          = BLE_BIT(6),             /*!< duplicate scan exceptional URI list */
     ESP_BLE_DUPLICATE_SCAN_EXCEPTIONAL_ALL_LIST                   = 0xFFFF,                 /*!< duplicate scan exceptional all list */
 } esp_duplicate_scan_exceptional_list_type_t;
 
@@ -858,12 +867,22 @@ typedef struct {
 * @brief periodic adv sync parameters
 */
 typedef struct {
-    esp_ble_gap_sync_t filter_policy;   /*!< periodic advertising sync filter policy */
-    uint8_t sid;                        /*!< periodic advertising sid */
-    esp_ble_addr_type_t addr_type;      /*!< periodic advertising address type */
-    esp_bd_addr_t addr;                 /*!< periodic advertising address */
-    uint16_t skip;                      /*!< the maximum number of periodic advertising events that can be skipped */
-    uint16_t sync_timeout;              /*!< synchronization timeout */
+    esp_ble_gap_sync_t filter_policy;       /*!< Configures the filter policy for periodic advertising sync:
+                                                 0: Use Advertising SID, Advertiser Address Type, and Advertiser Address parameters to determine the advertiser to listen to.
+                                                 1: Use the Periodic Advertiser List to determine the advertiser to listen to. */
+    #if (CONFIG_BT_BLE_FEAT_CREATE_SYNC_ENH)
+    esp_ble_gap_sync_t reports_disabled;    /*!< Supported only by esp32c2, esp32c6, and esp32h2; can be set by menuconfig:
+                                                 0: Reporting initially enabled.
+                                                 1: Reporting initially disabled. */
+    esp_ble_gap_sync_t filter_duplicates;   /*!< Supported only by esp32c2, esp32c6, and esp32h2; can be set by menuconfig:
+                                                 0: Duplicate filtering initially disabled.
+                                                 1: Duplicate filtering initially enabled. */
+    #endif
+    uint8_t sid;                            /*!< SID of the periodic advertising */
+    esp_ble_addr_type_t addr_type;          /*!< Address type of the periodic advertising */
+    esp_bd_addr_t addr;                     /*!< Address of the periodic advertising */
+    uint16_t skip;                          /*!< Maximum number of periodic advertising events that can be skipped */
+    uint16_t sync_timeout;                  /*!< Synchronization timeout */
 } esp_ble_gap_periodic_adv_sync_params_t;
 
 /**
@@ -886,7 +905,7 @@ typedef struct {
     esp_ble_gap_ext_adv_data_status_t data_status;  /*!< data type */
     uint8_t adv_data_len;                           /*!< extend advertising data length */
     uint8_t adv_data[251];                          /*!< extend advertising data */
-} esp_ble_gap_ext_adv_reprot_t;
+} esp_ble_gap_ext_adv_report_t;
 
 /**
 * @brief periodic adv report parameters
@@ -1021,6 +1040,12 @@ typedef union {
     struct ble_adv_stop_cmpl_evt_param {
         esp_bt_status_t status;                     /*!< Indicate adv stop operation success status */
     } adv_stop_cmpl;                                /*!< Event parameter of ESP_GAP_BLE_ADV_STOP_COMPLETE_EVT */
+    /**
+     * @brief ESP_GAP_BLE_ADV_CLEAR_COMPLETE_EVT
+     */
+    struct ble_adv_clear_cmpl_evt_param {
+        esp_bt_status_t status;                     /*!< Indicate adv clear operation success status */
+    } adv_clear_cmpl;                                /*!< Event parameter of ESP_GAP_BLE_ADV_CLEAR_COMPLETE_EVT */
 #endif // #if (BLE_42_FEATURE_SUPPORT == TRUE)
     /**
      * @brief ESP_GAP_BLE_SET_STATIC_RAND_ADDR_EVT
@@ -1324,7 +1349,7 @@ typedef union {
      * @brief ESP_GAP_BLE_EXT_ADV_REPORT_EVT
      */
     struct ble_ext_adv_report_param {
-        esp_ble_gap_ext_adv_reprot_t params;   /*!< extend advertising report parameters */
+        esp_ble_gap_ext_adv_report_t params;   /*!< extend advertising report parameters */
     } ext_adv_report;                          /*!< Event parameter of ESP_GAP_BLE_EXT_ADV_REPORT_EVT */
     /**
      * @brief ESP_GAP_BLE_PERIODIC_ADV_REPORT_EVT
@@ -1397,6 +1422,15 @@ typedef void (* esp_gap_ble_cb_t)(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_p
  *
  */
 esp_err_t esp_ble_gap_register_callback(esp_gap_ble_cb_t callback);
+
+/**
+ * @brief           This function is called to get the current gap callback
+ *
+ * @return
+ *                  - esp_gap_ble_cb_t : callback function
+ *
+ */
+esp_gap_ble_cb_t esp_ble_gap_get_callback(void);
 
 #if (BLE_42_FEATURE_SUPPORT == TRUE)
 /**
@@ -2197,8 +2231,9 @@ esp_err_t esp_ble_gap_set_ext_scan_params(const esp_ble_ext_scan_params_t *param
 /**
 * @brief           This function is used to enable scanning.
 *
-* @param[in]       duration : Scan duration
-* @param[in]       period  : Time interval from when the Controller started its last Scan Duration until it begins the subsequent Scan Duration.
+* @param[in]       duration  Scan duration time, where Time = N * 10 ms. Range: 0x0001 to 0xFFFF.
+* @param[in]       period    Time interval from when the Controller started its last Scan Duration until it begins the subsequent Scan Duration.
+*                            Time = N * 1.28 sec. Range: 0x0001 to 0xFFFF.
 *
 * @return            - ESP_OK : success
 *                    - other  : failed
@@ -2361,6 +2396,16 @@ esp_err_t esp_ble_gap_periodic_adv_set_info_trans(esp_bd_addr_t addr,
 esp_err_t esp_ble_gap_set_periodic_adv_sync_trans_params(esp_bd_addr_t addr,
                                                          const esp_ble_gap_past_params_t *params);
 #endif //#if (BLE_FEAT_PERIODIC_ADV_SYNC_TRANSFER == TRUE)
+
+/**
+* @brief           This function is used to clear legacy advertising
+*
+*
+* @return            - ESP_OK : success
+*                    - other  : failed
+*
+*/
+esp_err_t esp_ble_gap_clear_advertising(void);
 
 #ifdef __cplusplus
 }

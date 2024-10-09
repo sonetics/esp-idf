@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2021-2022 Espressif Systems (Shanghai) CO LTD
+# SPDX-FileCopyrightText: 2021-2023 Espressif Systems (Shanghai) CO LTD
 # SPDX-License-Identifier: Apache-2.0
 
 # pylint: disable=W0621  # redefined-outer-name
@@ -79,8 +79,14 @@ ENV_MARKERS = {
     # single-dut markers
     'generic': 'tests should be run on generic runners',
     'flash_suspend': 'support flash suspend feature',
-    'ip101': 'connected via wired 10/100M ethernet',
-    'lan8720': 'connected via LAN8720 ethernet transceiver',
+    'eth_ip101': 'connected via wired 10/100M ethernet',
+    'eth_lan8720': 'connected via LAN8720 ethernet transceiver',
+    'eth_rtl8201': 'connected via RTL8201 ethernet transceiver',
+    'eth_ksz8041': 'connected via KSZ8041 ethernet transceiver',
+    'eth_dp83848': 'connected via DP83848 ethernet transceiver',
+    'eth_w5500': 'SPI Ethernet module with two W5500',
+    'eth_ksz8851snl': 'SPI Ethernet module with two KSZ8851SNL',
+    'eth_dm9051': 'SPI Ethernet module with two DM9051',
     'quad_psram': 'runners with quad psram',
     'octal_psram': 'runners with octal psram',
     'usb_host': 'usb host runners',
@@ -127,6 +133,7 @@ ENV_MARKERS = {
     # multi-dut markers
     'ieee802154': 'ieee802154 related tests should run on ieee802154 runners.',
     'openthread_br': 'tests should be used for openthread border router.',
+    'openthread_sleep': 'tests should be used for openthread sleepy device.',
     'wifi_two_dut': 'tests should be run on runners which has two wifi duts connected.',
     'generic_multi_device': 'generic multiple devices whose corresponding gpio pins are connected to each other.',
     'twai_network': 'multiple runners form a TWAI network.',
@@ -298,6 +305,11 @@ def junit_properties(test_case_name: str, record_xml_attribute: Callable[[str, o
     This fixture is autoused and will modify the junit report test case name to <target>.<config>.<case_name>
     """
     record_xml_attribute('name', test_case_name)
+
+
+@pytest.fixture(autouse=True)
+def set_test_case_name(request: FixtureRequest, test_case_name: str) -> None:
+    request.node.funcargs['test_case_name'] = test_case_name
 
 
 ######################

@@ -54,9 +54,6 @@
   - "tools/ci/ci_build_apps.py"
   - "tools/test_build_system/**/*"
 
-.patterns-sbom: &patterns-sbom
-  - "tools/test_sbom/*"
-
 .patterns-custom_test: &patterns-custom_test
   - "tools/ci/python_packages/gitlab_api.py"
   - "tools/ci/python_packages/tiny_test_fw/**/*"
@@ -96,6 +93,13 @@
   - "examples/common_components/iperf/**/*"
   - "examples/openthread/**/*"
 
+.patterns-example_test-otsleepy: &patterns-example_test-otsleepy
+  - "components/esp_hw_support/**/*"
+  - "components/esp_netif/**/*"
+  - "components/lwip/**/*"
+  - "components/openthread/**/*"
+  - "examples/openthread/**/*"
+
 .patterns-target_test-wifi: &patterns-target_test-wifi
   - "components/esp_netif/**/*"
   - "components/lwip/**/*"
@@ -103,20 +107,6 @@
   - "components/esp_phy/**/*"
   - "components/wpa_supplicant/**/*"
   - "components/esp_coex/**/*"
-
-.patterns-integration_test-ble: &patterns-integration_test-ble
-  - "tools/ci/python_packages/gitlab_api.py"
-  - "tools/ci/integration_test/**/*"
-  - "components/bt/controller/lib_esp32"
-  - "components/bt/controller/lib_esp32c3_family"
-  - "components/bt/controller/lib_esp32h2/esp32h2-bt-lib"
-  - "components/bt/host/nimble/nimble"
-  - "components/esp_phy/lib"
-  - "components/esp_coex/**/*"
-
-.patterns-integration_test-wifi: &patterns-integration_test-wifi
-  - "tools/ci/python_packages/gitlab_api.py"
-  - "tools/ci/integration_test/**/*"
 
 .patterns-host_test: &patterns-host_test
   - ".gitlab/ci/host-test.yml"
@@ -169,6 +159,8 @@
 
   - "tools/split_paths_by_spaces.py"
 
+  - "tools/check_python_dependencies.py"
+
 .patterns-windows: &patterns-windows
   - "tools/windows/**/*"
 
@@ -186,7 +178,6 @@
   - "components/esp_phy/lib"
   - "components/esp_wifi/lib"
   - "components/esp_coex/lib"
-  - "components/ieee802154/lib"
   - "components/json/cJSON"
   - "components/lwip/lwip"
   - "components/mbedtls/mbedtls"
@@ -330,13 +321,19 @@
   if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+(\.\d+)?($|-)/'
 
 .if-protected: &if-protected
-  if: '($CI_COMMIT_REF_NAME == "master" || $CI_COMMIT_BRANCH =~ /^release\/v/ || $CI_COMMIT_TAG =~ /^v\d+\.\d+(\.\d+)?($|-)/)'
+  if: '($CI_COMMIT_REF_NAME == "master" || $CI_COMMIT_BRANCH =~ /^release\/v/ || $CI_COMMIT_TAG =~ /^v\d+\.\d+(\.\d+)?($|-)/) || $CI_COMMIT_TAG =~ /^qa-test/'
 
 .if-protected-no_label: &if-protected-no_label
   if: '($CI_COMMIT_REF_NAME == "master" || $CI_COMMIT_BRANCH =~ /^release\/v/ || $CI_COMMIT_TAG =~ /^v\d+\.\d+(\.\d+)?($|-)/) && $BOT_TRIGGER_WITH_LABEL == null'
 
+.if-qa-test-tag: &if-qa-test-tag
+  if: '$CI_COMMIT_TAG =~ /^qa-test/'
+
 .if-dev-push: &if-dev-push
-  if: '$CI_COMMIT_REF_NAME != "master" && $CI_COMMIT_BRANCH !~ /^release\/v/ && $CI_COMMIT_TAG !~ /^v\d+\.\d+(\.\d+)?($|-)/ && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "merge_request_event")'
+  if: '$CI_COMMIT_REF_NAME != "master" && $CI_COMMIT_BRANCH !~ /^release\/v/ && $CI_COMMIT_TAG !~ /^v\d+\.\d+(\.\d+)?($|-)/ && $CI_COMMIT_TAG !~ /^qa-test/ && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "merge_request_event")'
+
+.if-merge_request: &if-merge_request
+  if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
 
 .if-schedule: &if-schedule
   if: '$CI_PIPELINE_SOURCE == "schedule"'
@@ -369,10 +366,24 @@
   rules:
     - <<: *if-protected
 
-.rules:protected-no_label:
+.rules:push_to_github:
   rules:
+    - <<: *if-qa-test-tag
+      when: never
     - <<: *if-protected-no_label
 
+.rules:protected-no_label-always:
+  rules:
+    - <<: *if-qa-test-tag
+      when: never
+    - <<: *if-protected-no_label
+      when: always
+
+.rules:mr:
+  rules:
+    - <<: *if-merge_request
+
+### Patterns ###
 .rules:patterns:python-cache:
   rules:
     - *if-schedule
@@ -427,14 +438,6 @@
       changes: *patterns-python-files
     - <<: *if-dev-push
       changes: *patterns-sonarqube-files
-
-.rules:patterns:sbom:
-  rules:
-    - <<: *if-protected
-    - <<: *if-dev-push
-      changes: *patterns-sbom
-    - <<: *if-dev-push
-      changes: *patterns-submodule
 
 # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 # DO NOT place comments or maintain any code from this line
@@ -529,18 +532,6 @@
 .if-label-host_test: &if-label-host_test
   if: '$BOT_LABEL_HOST_TEST || $CI_MERGE_REQUEST_LABELS =~ /^(?:[^,\n\r]+,)*host_test(?:,[^,\n\r]+)*$/i'
 
-.if-label-integration_test: &if-label-integration_test
-  if: '$BOT_LABEL_INTEGRATION_TEST || $CI_MERGE_REQUEST_LABELS =~ /^(?:[^,\n\r]+,)*integration_test(?:,[^,\n\r]+)*$/i'
-
-.if-label-integration_test_ble: &if-label-integration_test_ble
-  if: '$BOT_LABEL_INTEGRATION_TEST_BLE || $CI_MERGE_REQUEST_LABELS =~ /^(?:[^,\n\r]+,)*integration_test_ble(?:,[^,\n\r]+)*$/i'
-
-.if-label-integration_test_wifi: &if-label-integration_test_wifi
-  if: '$BOT_LABEL_INTEGRATION_TEST_WIFI || $CI_MERGE_REQUEST_LABELS =~ /^(?:[^,\n\r]+,)*integration_test_wifi(?:,[^,\n\r]+)*$/i'
-
-.if-label-lan8720: &if-label-lan8720
-  if: '$BOT_LABEL_LAN8720 || $CI_MERGE_REQUEST_LABELS =~ /^(?:[^,\n\r]+,)*lan8720(?:,[^,\n\r]+)*$/i'
-
 .if-label-macos: &if-label-macos
   if: '$BOT_LABEL_MACOS || $CI_MERGE_REQUEST_LABELS =~ /^(?:[^,\n\r]+,)*macos(?:,[^,\n\r]+)*$/i'
 
@@ -610,7 +601,6 @@
     - <<: *if-label-component_ut_esp32h2
     - <<: *if-label-component_ut_esp32s2
     - <<: *if-label-component_ut_esp32s3
-    - <<: *if-label-lan8720
     - <<: *if-label-target_test
     - <<: *if-label-unit_test
     - <<: *if-label-unit_test_esp32
@@ -651,7 +641,6 @@
     - <<: *if-label-build
     - <<: *if-label-component_ut
     - <<: *if-label-component_ut_esp32
-    - <<: *if-label-lan8720
     - <<: *if-label-target_test
     - <<: *if-label-unit_test
     - <<: *if-label-unit_test_esp32
@@ -1147,6 +1136,8 @@
     - <<: *if-dev-push
       changes: *patterns-example_test-i154
     - <<: *if-dev-push
+      changes: *patterns-example_test-otsleepy
+    - <<: *if-dev-push
       changes: *patterns-example_test-sdio
     - <<: *if-dev-push
       changes: *patterns-example_test-usb
@@ -1317,6 +1308,8 @@
     - <<: *if-dev-push
       changes: *patterns-example_test-i154
     - <<: *if-dev-push
+      changes: *patterns-example_test-otsleepy
+    - <<: *if-dev-push
       changes: *patterns-example_test-sdio
     - <<: *if-dev-push
       changes: *patterns-example_test-usb
@@ -1358,6 +1351,8 @@
       changes: *patterns-example_test-ethernet
     - <<: *if-dev-push
       changes: *patterns-example_test-i154
+    - <<: *if-dev-push
+      changes: *patterns-example_test-otsleepy
     - <<: *if-dev-push
       changes: *patterns-example_test-sdio
     - <<: *if-dev-push
@@ -1457,27 +1452,6 @@
     - <<: *if-dev-push
       changes: *patterns-target_test-wifi
 
-.rules:build:integration_test:
-  rules:
-    - <<: *if-revert-branch
-      when: never
-    - <<: *if-protected
-    - <<: *if-label-build
-    - <<: *if-label-integration_test
-    - <<: *if-label-integration_test_ble
-    - <<: *if-label-integration_test_wifi
-    - <<: *if-label-target_test
-    - <<: *if-dev-push
-      changes: *patterns-build_components
-    - <<: *if-dev-push
-      changes: *patterns-build_system
-    - <<: *if-dev-push
-      changes: *patterns-integration_test-ble
-    - <<: *if-dev-push
-      changes: *patterns-integration_test-wifi
-    - <<: *if-dev-push
-      changes: *patterns-target_test-wifi
-
 .rules:build:macos:
   rules:
     - <<: *if-revert-branch
@@ -1522,10 +1496,6 @@
     - <<: *if-label-example_test_esp32h2
     - <<: *if-label-example_test_esp32s2
     - <<: *if-label-example_test_esp32s3
-    - <<: *if-label-integration_test
-    - <<: *if-label-integration_test_ble
-    - <<: *if-label-integration_test_wifi
-    - <<: *if-label-lan8720
     - <<: *if-label-target_test
     - <<: *if-label-unit_test
     - <<: *if-label-unit_test_esp32
@@ -1564,15 +1534,13 @@
     - <<: *if-dev-push
       changes: *patterns-example_test-i154
     - <<: *if-dev-push
+      changes: *patterns-example_test-otsleepy
+    - <<: *if-dev-push
       changes: *patterns-example_test-sdio
     - <<: *if-dev-push
       changes: *patterns-example_test-usb
     - <<: *if-dev-push
       changes: *patterns-example_test-wifi
-    - <<: *if-dev-push
-      changes: *patterns-integration_test-ble
-    - <<: *if-dev-push
-      changes: *patterns-integration_test-wifi
     - <<: *if-dev-push
       changes: *patterns-target_test-adc
     - <<: *if-dev-push
@@ -1594,7 +1562,6 @@
       when: never
     - <<: *if-protected
     - <<: *if-label-build
-    - <<: *if-label-lan8720
     - <<: *if-label-target_test
     - <<: *if-label-unit_test
     - <<: *if-label-unit_test_esp32
@@ -1631,7 +1598,6 @@
       when: never
     - <<: *if-protected
     - <<: *if-label-build
-    - <<: *if-label-lan8720
     - <<: *if-label-target_test
     - <<: *if-label-unit_test
     - <<: *if-label-unit_test_esp32
@@ -1835,13 +1801,6 @@
       changes: *patterns-unit_test-flash_multi
     - <<: *if-dev-push
       changes: *patterns-unit_test-sdio
-
-.rules:labels-protected:lan8720:
-  rules:
-    - <<: *if-revert-branch
-      when: never
-    - <<: *if-protected
-    - <<: *if-label-lan8720
 
 .rules:labels:nvs_coverage:
   rules:
@@ -2697,6 +2656,20 @@
     - <<: *if-dev-push
       changes: *patterns-target_test-i154
 
+.rules:test:example_test-otsleepy:
+  rules:
+    - <<: *if-revert-branch
+      when: never
+    - <<: *if-protected
+    - <<: *if-label-build-only
+      when: never
+    - <<: *if-label-example_test
+    - <<: *if-label-target_test
+    - <<: *if-dev-push
+      changes: *patterns-example_test-otsleepy
+    - <<: *if-dev-push
+      changes: *patterns-target_test-i154
+
 .rules:test:host_test:
   rules:
     - <<: *if-revert-branch
@@ -2707,52 +2680,6 @@
     - <<: *if-label-host_test
     - <<: *if-dev-push
       changes: *patterns-host_test
-
-.rules:test:integration_test:
-  rules:
-    - <<: *if-revert-branch
-      when: never
-    - <<: *if-protected
-    - <<: *if-label-build-only
-      when: never
-    - <<: *if-label-integration_test
-    - <<: *if-label-integration_test_ble
-    - <<: *if-label-integration_test_wifi
-    - <<: *if-label-target_test
-    - <<: *if-dev-push
-      changes: *patterns-integration_test-ble
-    - <<: *if-dev-push
-      changes: *patterns-integration_test-wifi
-    - <<: *if-dev-push
-      changes: *patterns-target_test-wifi
-
-.rules:test:integration_test_ble:
-  rules:
-    - <<: *if-revert-branch
-      when: never
-    - <<: *if-protected
-    - <<: *if-label-build-only
-      when: never
-    - <<: *if-label-integration_test
-    - <<: *if-label-integration_test_ble
-    - <<: *if-label-target_test
-    - <<: *if-dev-push
-      changes: *patterns-integration_test-ble
-
-.rules:test:integration_test_wifi:
-  rules:
-    - <<: *if-revert-branch
-      when: never
-    - <<: *if-protected
-    - <<: *if-label-build-only
-      when: never
-    - <<: *if-label-integration_test
-    - <<: *if-label-integration_test_wifi
-    - <<: *if-label-target_test
-    - <<: *if-dev-push
-      changes: *patterns-integration_test-wifi
-    - <<: *if-dev-push
-      changes: *patterns-target_test-wifi
 
 .rules:test:submodule:
   rules:

@@ -27,6 +27,7 @@ INPUT = \
     $(PROJECT_PATH)/components/bootloader_support/include/bootloader_random.h \
     $(PROJECT_PATH)/components/bootloader_support/include/esp_app_format.h \
     $(PROJECT_PATH)/components/bootloader_support/include/esp_flash_encrypt.h \
+    $(PROJECT_PATH)/components/esp_coex/include/esp_coexist.h \
     $(PROJECT_PATH)/components/bt/common/api/include/api/esp_blufi_api.h \
     $(PROJECT_PATH)/components/bt/esp_ble_mesh/api/core/include/esp_ble_mesh_common_api.h \
     $(PROJECT_PATH)/components/bt/esp_ble_mesh/api/core/include/esp_ble_mesh_local_data_operation_api.h \
@@ -238,6 +239,7 @@ INPUT = \
     $(PROJECT_PATH)/components/lwip/include/apps/esp_sntp.h \
     $(PROJECT_PATH)/components/lwip/include/apps/ping/ping_sock.h \
     $(PROJECT_PATH)/components/mbedtls/esp_crt_bundle/include/esp_crt_bundle.h \
+    $(PROJECT_PATH)/components/mbedtls/port/include/ecdsa/ecdsa_alt.h \
     $(PROJECT_PATH)/components/mqtt/esp-mqtt/include/mqtt_client.h \
     $(PROJECT_PATH)/components/nvs_flash/include/nvs_flash.h \
     $(PROJECT_PATH)/components/nvs_flash/include/nvs.h \
@@ -253,9 +255,11 @@ INPUT = \
     $(PROJECT_PATH)/components/protocomm/include/security/protocomm_security.h \
     $(PROJECT_PATH)/components/protocomm/include/security/protocomm_security0.h \
     $(PROJECT_PATH)/components/protocomm/include/security/protocomm_security1.h \
+    $(PROJECT_PATH)/components/protocomm/include/security/protocomm_security2.h \
     $(PROJECT_PATH)/components/protocomm/include/transports/protocomm_ble.h \
     $(PROJECT_PATH)/components/protocomm/include/transports/protocomm_console.h \
     $(PROJECT_PATH)/components/protocomm/include/transports/protocomm_httpd.h \
+    $(PROJECT_PATH)/components/protocomm/include/crypto/srp6a/esp_srp.h \
     $(PROJECT_PATH)/components/pthread/include/esp_pthread.h \
     $(PROJECT_PATH)/components/sdmmc/include/sdmmc_cmd.h \
     $(PROJECT_PATH)/components/soc/$(IDF_TARGET)/include/soc/adc_channel.h \

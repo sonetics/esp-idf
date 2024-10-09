@@ -53,10 +53,6 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 
-#if SOC_AES_SUPPORT_GCM
-#include "aes/esp_aes_gcm.h"
-#endif
-
 #if SOC_AES_GDMA
 #define AES_LOCK() esp_crypto_sha_aes_lock_acquire()
 #define AES_RELEASE() esp_crypto_sha_aes_lock_release()
@@ -177,23 +173,30 @@ static IRAM_ATTR void esp_aes_complete_isr(void *arg)
     }
 }
 
+void esp_aes_intr_alloc(void)
+{
+    if (op_complete_sem == NULL) {
+
+        esp_err_t ret = esp_intr_alloc(ETS_AES_INTR_SOURCE, 0, esp_aes_complete_isr, NULL, NULL);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to allocate AES interrupt %d", ret);
+            // This should be treated as fatal error as this API would mostly
+            // be invoked within mbedTLS interface. There is no way for the system
+            // to proceed if the AES interrupt allocation fails here.
+            abort();
+        }
+
+        static StaticSemaphore_t op_sem_buf;
+        op_complete_sem = xSemaphoreCreateBinaryStatic(&op_sem_buf);
+        // Static semaphore creation is unlikley to fail but still basic sanity
+        assert(op_complete_sem != NULL);
+    }
+}
+
 static esp_err_t esp_aes_isr_initialise( void )
 {
     aes_hal_interrupt_clear();
     aes_hal_interrupt_enable(true);
-    if (op_complete_sem == NULL) {
-        op_complete_sem = xSemaphoreCreateBinary();
-
-        if (op_complete_sem == NULL) {
-            ESP_LOGE(TAG, "Failed to create intr semaphore");
-            return ESP_FAIL;
-        }
-
-        esp_err_t ret = esp_intr_alloc(ETS_AES_INTR_SOURCE, 0, esp_aes_complete_isr, NULL, NULL);
-        if (ret != ESP_OK) {
-            return ret;
-        }
-    }
 
     /* AES is clocked proportionally to CPU clock, take power management lock */
 #ifdef CONFIG_PM_ENABLE
@@ -432,7 +435,7 @@ static int esp_aes_process_dma(esp_aes_context *ctx, const unsigned char *input,
     /* Only use interrupt for long AES operations */
     if (len > AES_DMA_INTR_TRIG_LEN) {
         use_intr = true;
-        if (esp_aes_isr_initialise() == ESP_FAIL) {
+        if (esp_aes_isr_initialise() != ESP_OK) {
             ESP_LOGE(TAG, "ESP-AES ISR initialisation failed");
             ret = -1;
             goto cleanup;
@@ -480,7 +483,7 @@ cleanup:
 }
 
 
-#if SOC_AES_SUPPORT_GCM
+#if CONFIG_MBEDTLS_HARDWARE_GCM
 
 /* Encrypt/decrypt with AES-GCM the input using DMA
  * The function esp_aes_process_dma_gcm zeroises the output buffer in the case of following conditions:
@@ -575,7 +578,7 @@ int esp_aes_process_dma_gcm(esp_aes_context *ctx, const unsigned char *input, un
     /* Only use interrupt for long AES operations */
     if (len > AES_DMA_INTR_TRIG_LEN) {
         use_intr = true;
-        if (esp_aes_isr_initialise() == ESP_FAIL) {
+        if (esp_aes_isr_initialise() != ESP_OK) {
             ESP_LOGE(TAG, "ESP-AES ISR initialisation failed");
             ret = -1;
             goto cleanup;
@@ -615,7 +618,7 @@ cleanup:
     return ret;
 }
 
-#endif //SOC_AES_SUPPORT_GCM
+#endif //CONFIG_MBEDTLS_HARDWARE_GCM
 
 static int esp_aes_validate_input(esp_aes_context *ctx, const unsigned char *input,
                                   unsigned char *output )

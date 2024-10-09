@@ -27,7 +27,9 @@ if(NOT BOOTLOADER_BUILD)
                      "revision.c"
                      "rtc_module.c"
                      "sleep_modes.c"
+                     "sleep_console.c"
                      "sleep_gpio.c"
+                     "sleep_event.c"
                      "sleep_modem.c"
                      "regi2c_ctrl.c"
                      "esp_gpio_reserve.c"
@@ -57,6 +59,9 @@ if(NOT BOOTLOADER_BUILD)
 
     if(CONFIG_SOC_GDMA_SUPPORTED)
         list(APPEND srcs "dma/gdma.c" "dma/async_memcpy_impl_gdma.c")
+        if(CONFIG_SOC_PAU_SUPPORTED)
+            list(APPEND srcs "dma/gdma_sleep_retention.c")
+        endif()
     endif()
 
     if(CONFIG_SOC_CP_DMA_SUPPORTED)

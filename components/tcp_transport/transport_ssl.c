@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2024 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -111,8 +111,11 @@ static int ssl_connect(esp_transport_handle_t t, const char *host, int port, int
     if (esp_tls_conn_new_sync(host, strlen(host), port, &ssl->cfg, ssl->tls) <= 0) {
         ESP_LOGE(TAG, "Failed to open a new connection");
         esp_tls_error_handle_t esp_tls_error_handle;
-        esp_tls_get_error_handle(ssl->tls, &esp_tls_error_handle);
-        esp_transport_set_errors(t, esp_tls_error_handle);
+        if (esp_tls_get_error_handle(ssl->tls, &esp_tls_error_handle) == ESP_OK) {
+            esp_transport_set_errors(t, esp_tls_error_handle);
+        } else {
+            ESP_LOGE(TAG, "Error in obtaining the error handle");
+        }
         goto exit_failure;
     }
 
@@ -369,6 +372,15 @@ void esp_transport_ssl_set_client_cert_data(esp_transport_handle_t t, const char
     ssl->cfg.clientcert_pem_buf = (void *)data;
     ssl->cfg.clientcert_pem_bytes = len + 1;
 }
+
+#ifdef CONFIG_MBEDTLS_HARDWARE_ECDSA_SIGN
+void esp_transport_ssl_set_client_key_ecdsa_peripheral(esp_transport_handle_t t, uint8_t ecdsa_efuse_blk)
+{
+    GET_SSL_FROM_TRANSPORT_OR_RETURN(ssl, t);
+    ssl->cfg.use_ecdsa_peripheral = true;
+    ssl->cfg.ecdsa_key_efuse_blk = ecdsa_efuse_blk;
+}
+#endif
 
 void esp_transport_ssl_set_client_cert_data_der(esp_transport_handle_t t, const char *data, int len)
 {

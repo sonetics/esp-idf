@@ -416,13 +416,9 @@ components/esp_hid/include/esp_hidd_transport.h
 components/esp_hid/include/esp_hidh.h
 components/esp_hid/include/esp_hidh_bluedroid.h
 components/esp_hid/include/esp_hidh_gattc.h
-components/esp_hid/include/esp_hidh_transport.h
-components/esp_hid/private/ble_hidd.h
-components/esp_hid/private/ble_hidh.h
 components/esp_hid/private/bt_hidd.h
 components/esp_hid/private/bt_hidh.h
 components/esp_hid/private/esp_hidd_private.h
-components/esp_hid/src/esp_hid_common.c
 components/esp_hid/test/hid_descriptor.h
 components/esp_hid/test/test_esp_hid.c
 components/esp_hw_support/include/esp_clk.h
@@ -496,17 +492,6 @@ components/esp_rom/include/esp32s2/rom/libc_stubs.h
 components/esp_rom/include/esp32s2/rom/opi_flash.h
 components/esp_rom/include/esp32s2/rom/rsa_pss.h
 components/esp_rom/include/esp32s2/rom/sha.h
-components/esp_rom/include/esp32s2/rom/usb/cdc_acm.h
-components/esp_rom/include/esp32s2/rom/usb/chip_usb_dw_wrapper.h
-components/esp_rom/include/esp32s2/rom/usb/cpio.h
-components/esp_rom/include/esp32s2/rom/usb/usb_cdc.h
-components/esp_rom/include/esp32s2/rom/usb/usb_common.h
-components/esp_rom/include/esp32s2/rom/usb/usb_dc.h
-components/esp_rom/include/esp32s2/rom/usb/usb_descriptor.h
-components/esp_rom/include/esp32s2/rom/usb/usb_device.h
-components/esp_rom/include/esp32s2/rom/usb/usb_dfu.h
-components/esp_rom/include/esp32s2/rom/usb/usb_os_glue.h
-components/esp_rom/include/esp32s2/rom/usb/usb_persist.h
 components/esp_rom/include/esp32s3/rom/bigint.h
 components/esp_rom/include/esp32s3/rom/crc.h
 components/esp_rom/include/esp32s3/rom/digital_signature.h
@@ -515,17 +500,6 @@ components/esp_rom/include/esp32s3/rom/opi_flash.h
 components/esp_rom/include/esp32s3/rom/rsa_pss.h
 components/esp_rom/include/esp32s3/rom/sha.h
 components/esp_rom/include/esp32s3/rom/tjpgd.h
-components/esp_rom/include/esp32s3/rom/usb/cdc_acm.h
-components/esp_rom/include/esp32s3/rom/usb/chip_usb_dw_wrapper.h
-components/esp_rom/include/esp32s3/rom/usb/cpio.h
-components/esp_rom/include/esp32s3/rom/usb/usb_cdc.h
-components/esp_rom/include/esp32s3/rom/usb/usb_common.h
-components/esp_rom/include/esp32s3/rom/usb/usb_dc.h
-components/esp_rom/include/esp32s3/rom/usb/usb_descriptor.h
-components/esp_rom/include/esp32s3/rom/usb/usb_device.h
-components/esp_rom/include/esp32s3/rom/usb/usb_dfu.h
-components/esp_rom/include/esp32s3/rom/usb/usb_os_glue.h
-components/esp_rom/include/esp32s3/rom/usb/usb_persist.h
 components/esp_rom/include/esp_rom_crc.h
 components/esp_rom/include/esp_rom_gpio.h
 components/esp_rom/include/linux/soc/reset_reasons.h
@@ -568,7 +542,6 @@ components/esp_system/test_eh_frame_parser/linker.ld
 components/esp_system/ubsan.c
 components/esp_wifi/include/esp_private/esp_wifi_types_private.h
 components/esp_wifi/include/esp_private/wifi_types.h
-components/esp_wifi/include/smartconfig_ack.h
 components/esp_wifi/src/lib_printf.c
 components/esp_wifi/src/mesh_event.c
 components/esp_wifi/src/smartconfig.c
@@ -703,7 +676,6 @@ components/mbedtls/port/aes/block/esp_aes.c
 components/mbedtls/port/aes/dma/esp_aes.c
 components/mbedtls/port/aes/dma/esp_aes_crypto_dma_impl.c
 components/mbedtls/port/aes/dma/esp_aes_gdma_impl.c
-components/mbedtls/port/aes/dma/include/esp_aes_dma_priv.h
 components/mbedtls/port/aes/esp_aes_xts.c
 components/mbedtls/port/include/aes/esp_aes.h
 components/mbedtls/port/include/aes/esp_aes_internal.h
@@ -746,7 +718,6 @@ components/nvs_flash/src/nvs_pagemanager.hpp
 components/nvs_flash/src/nvs_partition.cpp
 components/nvs_flash/src/nvs_partition_lookup.cpp
 components/nvs_flash/src/nvs_partition_lookup.hpp
-components/nvs_flash/src/nvs_platform.hpp
 components/nvs_flash/src/nvs_test_api.h
 components/nvs_flash/src/nvs_types.cpp
 components/nvs_flash/src/partition.hpp
@@ -857,7 +828,6 @@ components/soc/esp32c3/include/soc/sensitive_struct.h
 components/soc/esp32c3/include/soc/soc_pins.h
 components/soc/esp32c3/include/soc/spi_mem_reg.h
 components/soc/esp32c3/include/soc/spi_pins.h
-components/soc/esp32c3/include/soc/spi_reg.h
 components/soc/esp32c3/include/soc/system_reg.h
 components/soc/esp32c3/include/soc/system_struct.h
 components/soc/esp32c3/include/soc/systimer_reg.h
@@ -900,9 +870,7 @@ components/soc/esp32s2/include/soc/sdmmc_pins.h
 components/soc/esp32s2/include/soc/sens_reg.h
 components/soc/esp32s2/include/soc/sensitive_reg.h
 components/soc/esp32s2/include/soc/soc_ulp.h
-components/soc/esp32s2/include/soc/spi_mem_reg.h
 components/soc/esp32s2/include/soc/spi_pins.h
-components/soc/esp32s2/include/soc/spi_reg.h
 components/soc/esp32s2/include/soc/systimer_reg.h
 components/soc/esp32s2/include/soc/systimer_struct.h
 components/soc/esp32s2/include/soc/touch_sensor_channel.h
@@ -1021,7 +989,6 @@ components/spi_flash/sim/sdkconfig/sdkconfig.h
 components/spi_flash/sim/stubs/bsd/strlcpy.c
 components/spi_flash/spi_flash_chip_boya.c
 components/spi_flash/spi_flash_chip_issi.c
-components/spi_flash/spi_flash_chip_mxic.c
 components/spi_flash/spi_flash_chip_winbond.c
 components/spi_flash/test/test_esp_flash.c
 components/spi_flash/test/test_flash_encryption.c
@@ -1060,7 +1027,6 @@ components/wifi_provisioning/python/wifi_scan_pb2.py
 components/wifi_provisioning/src/scheme_console.c
 components/wifi_provisioning/src/wifi_config.c
 components/wifi_provisioning/src/wifi_scan.c
-components/wpa_supplicant/esp_supplicant/src/esp_scan_i.h
 components/wpa_supplicant/esp_supplicant/src/esp_wpa_err.h
 components/wpa_supplicant/include/utils/wpa_debug.h
 components/wpa_supplicant/include/utils/wpabuf.h

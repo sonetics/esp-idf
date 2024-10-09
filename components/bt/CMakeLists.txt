@@ -3,33 +3,35 @@ if(CONFIG_BT_ENABLED)
     set(srcs "")
     set(include_dirs "")
     set(ldfragments "linker.lf")
+    if(CONFIG_BT_CONTROLLER_ENABLED)
+        if(CONFIG_IDF_TARGET_ESP32)
+            list(APPEND srcs "controller/esp32/bt.c"
+                             "controller/esp32/hli_api.c"
+                             "controller/esp32/hli_vectors.S")
+            list(APPEND include_dirs include/esp32/include)
 
-    if(CONFIG_IDF_TARGET_ESP32)
-        list(APPEND srcs "controller/esp32/bt.c"
-                         "controller/esp32/hli_api.c"
-                         "controller/esp32/hli_vectors.S")
-        list(APPEND include_dirs include/esp32/include)
+        elseif(CONFIG_IDF_TARGET_ESP32C3)
+            list(APPEND srcs "controller/esp32c3/bt.c")
+            list(APPEND include_dirs include/esp32c3/include)
 
-    elseif(CONFIG_IDF_TARGET_ESP32C3)
-        list(APPEND srcs "controller/esp32c3/bt.c")
-        list(APPEND include_dirs include/esp32c3/include)
+        elseif(CONFIG_IDF_TARGET_ESP32S3)
+            list(APPEND srcs "controller/esp32c3/bt.c")
+            list(APPEND include_dirs include/esp32c3/include)
 
-    elseif(CONFIG_IDF_TARGET_ESP32S3)
-        list(APPEND srcs "controller/esp32c3/bt.c")
-        list(APPEND include_dirs include/esp32c3/include)
+        elseif(CONFIG_IDF_TARGET_ESP32C2)
+            set(ldfragments "linker.lf.esp32c2")
+            list(APPEND srcs "controller/esp32c2/bt.c")
+            list(APPEND include_dirs include/esp32c2/include)
 
-    elseif(CONFIG_IDF_TARGET_ESP32C2)
-        set(ldfragments "linker.lf.esp32c2")
-        list(APPEND srcs "controller/esp32c2/bt.c")
-        list(APPEND include_dirs include/esp32c2/include)
+        elseif(CONFIG_IDF_TARGET_ESP32C6)
+            list(APPEND srcs "controller/esp32c6/bt.c")
+            list(APPEND include_dirs include/esp32c6/include)
 
-    elseif(CONFIG_IDF_TARGET_ESP32C6)
-        list(APPEND srcs "controller/esp32c6/bt.c")
-        list(APPEND include_dirs include/esp32c6/include)
+        elseif(CONFIG_IDF_TARGET_ESP32H2)
+            list(APPEND srcs "controller/esp32h2/bt.c")
+            list(APPEND include_dirs include/esp32h2/include)
+        endif()
 
-    elseif(CONFIG_IDF_TARGET_ESP32H2)
-        list(APPEND srcs "controller/esp32h2/bt.c")
-        list(APPEND include_dirs include/esp32h2/include)
     endif()
 
 
@@ -483,6 +485,11 @@ if(CONFIG_BT_ENABLED)
                     "porting/nimble/src/os_msys_init.c"
             )
 
+            if(CONFIG_BT_CONTROLLER_DISABLED)
+                list(APPEND srcs
+                        "host/nimble/nimble/porting/nimble/src/hal_uart.c"
+                    )
+            endif()
             list(APPEND include_dirs
                     porting/include
                     porting/nimble/include
@@ -524,6 +531,7 @@ if(CONFIG_BT_ENABLED)
         list(APPEND include_dirs
 
                     host/nimble/nimble/nimble/host/include
+                    host/nimble/nimble/nimble/include
                     host/nimble/nimble/nimble/host/services/ans/include
                     host/nimble/nimble/nimble/host/services/bas/include
                     host/nimble/nimble/nimble/host/services/dis/include
@@ -535,7 +543,10 @@ if(CONFIG_BT_ENABLED)
                     host/nimble/nimble/nimble/host/services/ipss/include
                     host/nimble/nimble/nimble/host/services/lls/include
                     host/nimble/nimble/nimble/host/services/prox/include
+                    host/nimble/nimble/nimble/host/services/cts/include
                     host/nimble/nimble/nimble/host/services/tps/include
+                    host/nimble/nimble/nimble/host/services/hid/include
+                    host/nimble/nimble/nimble/host/services/sps/include
                     host/nimble/nimble/nimble/host/util/include
                     host/nimble/nimble/nimble/host/store/ram/include
                     host/nimble/nimble/nimble/host/store/config/include
@@ -555,6 +566,9 @@ if(CONFIG_BT_ENABLED)
                     "host/nimble/nimble/nimble/host/services/dis/src/ble_svc_dis.c"
                     "host/nimble/nimble/nimble/host/services/lls/src/ble_svc_lls.c"
                     "host/nimble/nimble/nimble/host/services/prox/src/ble_svc_prox.c"
+                    "host/nimble/nimble/nimble/host/services/cts/src/ble_svc_cts.c"
+                    "host/nimble/nimble/nimble/host/services/hid/src/ble_svc_hid.c"
+                    "host/nimble/nimble/nimble/host/services/sps/src/ble_svc_sps.c"
                     "host/nimble/nimble/nimble/host/src/ble_hs_conn.c"
                     "host/nimble/nimble/nimble/host/src/ble_store_util.c"
                     "host/nimble/nimble/nimble/host/src/ble_sm.c"
@@ -603,11 +617,21 @@ if(CONFIG_BT_ENABLED)
                     "host/nimble/nimble/nimble/host/store/ram/src/ble_store_ram.c"
                     "host/nimble/nimble/nimble/host/store/config/src/ble_store_config.c"
                     "host/nimble/nimble/nimble/host/store/config/src/ble_store_nvs.c"
+                    "host/nimble/nimble/nimble/host/src/ble_gattc_cache.c"
+                    "host/nimble/nimble/nimble/host/src/ble_gattc_cache_conn.c"
                 )
+
+            if(CONFIG_BT_CONTROLLER_DISABLED AND CONFIG_BT_NIMBLE_TRANSPORT_UART)
+                list(APPEND srcs
+                        "host/nimble/nimble/nimble/transport/uart_ll/src/hci_uart.c"
+                        "host/nimble/nimble/nimble/transport/common/hci_h4/src/hci_h4.c"
+                )
+            endif()
 
             list(APPEND srcs
                 "host/nimble/nimble/porting/nimble/src/nimble_port.c"
                 "host/nimble/nimble/porting/npl/freertos/src/nimble_port_freertos.c"
+                "host/nimble/port/src/nvs_port.c"
             )
             list(APPEND include_dirs
                 porting/include
@@ -615,6 +639,12 @@ if(CONFIG_BT_ENABLED)
                 host/nimble/port/include
                 host/nimble/nimble/nimble/transport/include
             )
+
+            if(CONFIG_BT_CONTROLLER_DISABLED)
+                list(APPEND include_dirs
+                    host/nimble/nimble/nimble/transport/common/hci_h4/include
+                )
+            endif()
 
         if(NOT CONFIG_BT_LE_CONTROLLER_NPL_OS_PORTING_SUPPORT)
             list(APPEND srcs
@@ -625,6 +655,13 @@ if(CONFIG_BT_ENABLED)
                     "host/nimble/nimble/porting/nimble/src/os_msys_init.c"
                     "host/nimble/nimble/porting/npl/freertos/src/npl_os_freertos.c"
                     )
+
+            if(CONFIG_BT_CONTROLLER_DISABLED AND CONFIG_BT_NIMBLE_TRANSPORT_UART)
+                list(APPEND srcs
+                    "host/nimble/nimble/porting/nimble/src/hal_uart.c"
+                )
+            endif()
+
             list(APPEND include_dirs
                     host/nimble/nimble/porting/npl/freertos/include
                     host/nimble/nimble/porting/nimble/include
@@ -632,7 +669,7 @@ if(CONFIG_BT_ENABLED)
             )
         endif()
 
-        if(CONFIG_BT_NIMBLE_LEGACY_VHCI_ENABLE)
+        if(CONFIG_BT_NIMBLE_LEGACY_VHCI_ENABLE AND CONFIG_BT_CONTROLLER_ENABLED)
             list(APPEND srcs
                 "host/nimble/esp-hci/src/esp_nimble_hci.c"
             )
@@ -719,13 +756,13 @@ if(CONFIG_BT_ENABLED)
         target_link_directories(${COMPONENT_LIB} INTERFACE
                 "${CMAKE_CURRENT_LIST_DIR}/controller/lib_esp32c3_family/esp32s3")
         target_link_libraries(${COMPONENT_LIB} PUBLIC btdm_app)
-    elseif(CONFIG_IDF_TARGET_ESP32C2)
+    elseif(CONFIG_IDF_TARGET_ESP32C2 AND CONFIG_BT_CONTROLLER_ENABLED)
         add_prebuilt_library(libble_app "controller/lib_esp32c2/esp32c2-bt-lib/libble_app.a")
         target_link_libraries(${COMPONENT_LIB} PRIVATE libble_app)
-    elseif(CONFIG_IDF_TARGET_ESP32C6)
+    elseif(CONFIG_IDF_TARGET_ESP32C6 AND CONFIG_BT_CONTROLLER_ENABLED)
         add_prebuilt_library(libble_app "controller/lib_esp32c6/esp32c6-bt-lib/libble_app.a")
         target_link_libraries(${COMPONENT_LIB} PRIVATE libble_app)
-    elseif(CONFIG_IDF_TARGET_ESP32H2)
+    elseif(CONFIG_IDF_TARGET_ESP32H2 AND CONFIG_BT_CONTROLLER_ENABLED)
         add_prebuilt_library(libble_app "controller/lib_esp32h2/esp32h2-bt-lib/libble_app.a")
         target_link_libraries(${COMPONENT_LIB} PRIVATE libble_app)
     endif()

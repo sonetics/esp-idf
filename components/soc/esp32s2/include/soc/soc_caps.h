@@ -133,9 +133,9 @@
 #define SOC_CPU_CORES_NUM               (1U)
 #define SOC_CPU_INTR_NUM                32
 
-#define SOC_CPU_BREAKPOINTS_NUM         2
-#define SOC_CPU_WATCHPOINTS_NUM         2
-#define SOC_CPU_WATCHPOINT_SIZE         64 // bytes
+#define SOC_CPU_BREAKPOINTS_NUM             2
+#define SOC_CPU_WATCHPOINTS_NUM             2
+#define SOC_CPU_WATCHPOINT_MAX_REGION_SIZE  64 // bytes
 
 /*-------------------------- DAC CAPS ----------------------------------------*/
 #define SOC_DAC_CHAN_NUM      2
@@ -336,8 +336,7 @@
 #define SOC_SPIRAM_XIP_SUPPORTED      1
 
 /*-------------------------- USB CAPS ----------------------------------------*/
-#define SOC_USB_PERIPH_NUM 1
-
+#define SOC_USB_OTG_PERIPH_NUM          (1U)
 
 /*--------------------------- SHA CAPS ---------------------------------------*/
 /* Max amount of bytes in a single DMA operation is 4095,

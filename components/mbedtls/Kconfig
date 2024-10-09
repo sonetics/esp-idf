@@ -239,7 +239,6 @@ menu "mbedTLS"
         config MBEDTLS_SSL_KEEP_PEER_CERTIFICATE
             bool "Keep peer certificate after handshake completion"
             default y
-            depends on !MBEDTLS_DYNAMIC_FREE_PEER_CERT
             help
                 Keep the peer's certificate after completion of the handshake.
                 Disabling this option will save about 4kB of heap and some code size.
@@ -252,6 +251,22 @@ menu "mbedTLS"
             depends on MBEDTLS_X509_CRL_PARSE_C
             help
                 Enable PKCS #7 core for using PKCS #7-formatted signatures.
+
+        config MBEDTLS_SSL_CID_PADDING_GRANULARITY
+            int "Record plaintext padding"
+            default 16
+            range 0 32
+            depends on MBEDTLS_SSL_PROTO_TLS1_3 || MBEDTLS_SSL_DTLS_CONNECTION_ID
+            help
+                Controls the use of record plaintext padding in TLS 1.3 and
+                when using the Connection ID extension in DTLS 1.2.
+
+                The padding will always be chosen so that the length of the
+                padded plaintext is a multiple of the value of this option.
+
+                Notes:
+                    A value of 1 means that no padding will be used for outgoing records.
+                    On systems lacking division instructions, a power of two should be preferred.
 
         menu "DTLS-based configurations"
             depends on MBEDTLS_SSL_PROTO_DTLS
@@ -278,22 +293,6 @@ menu "mbedTLS"
                 depends on MBEDTLS_SSL_DTLS_CONNECTION_ID
                 help
                     Maximum length of CIDs used for outgoing DTLS messages
-
-            config MBEDTLS_SSL_CID_PADDING_GRANULARITY
-                int "Record plaintext padding (for DTLS 1.2)"
-                default 16
-                range 0 32
-                depends on MBEDTLS_SSL_DTLS_CONNECTION_ID
-                help
-                    Controls the use of record plaintext padding when
-                    using the Connection ID extension in DTLS 1.2.
-
-                    The padding will always be chosen so that the length of the
-                    padded plaintext is a multiple of the value of this option.
-
-                    Notes:
-                        A value of 1 means that no padding will be used for outgoing records.
-                        On systems lacking division instructions, a power of two should be preferred.
 
             config MBEDTLS_SSL_DTLS_SRTP
                 bool "Enable support for negotiation of DTLS-SRTP (RFC 5764)"
@@ -402,6 +401,29 @@ menu "mbedTLS"
             If MBEDTLS_HARDWARE_GCM is disabled and MBEDTLS_HARDWARE_AES is enabled then
             mbedTLS will still use the hardware accelerated AES block operation, but
             on a single block at a time.
+
+    config MBEDTLS_GCM_SUPPORT_NON_AES_CIPHER
+        bool "Enable support for non-AES ciphers in GCM operation"
+        depends on MBEDTLS_HARDWARE_AES
+        default n
+        help
+            Enable this config to support fallback to software definitions for a non-AES
+            cipher GCM operation as we support hardware acceleration only for AES cipher.
+            Some of the non-AES ciphers used in a GCM operation are DES, ARIA, CAMELLIA,
+            CHACHA20, BLOWFISH.
+
+            If this config is disabled, performing a non-AES cipher GCM operation with
+            the config MBEDTLS_HARDWARE_AES enabled will result in calculation of an
+            AES-GCM operation instead for the given input values and thus could lead
+            to failure in certificate validation which would ultimately lead to a SSL
+            handshake failure.
+
+            This config being by-default enabled leads to an increase in binary size
+            footprint of ~2.5KB.
+            In case you are sure that your use case (for example, client and server
+            configurations in case of a TLS handshake) would not involve any GCM
+            operations using a non-AES cipher, you can safely disable this config,
+            leading to reduction in binary size footprint.
 
     config MBEDTLS_HARDWARE_MPI
         bool "Enable hardware MPI (bignum) acceleration"
@@ -1051,5 +1073,26 @@ menu "mbedTLS"
             larger than SOC_RSA_MAX_BIT_LEN. If this is not active
             then the ESP will be unable to process keys greater
             than SOC_RSA_MAX_BIT_LEN.
+
+    config MBEDTLS_USE_CRYPTO_ROM_IMPL
+        bool "Use ROM implementation of the crypto algorithm"
+        depends on ESP_ROM_HAS_MBEDTLS_CRYPTO_LIB && IDF_EXPERIMENTAL_FEATURES
+        default "n"
+        select MBEDTLS_SHA512_C
+        select MBEDTLS_AES_C
+        select MBEDTLS_CCM_C
+        select MBEDTLS_ROM_MD5
+        select MBEDTLS_HARDWARE_SHA
+        help
+            Enable this flag to use mbedtls crypto algorithm from ROM instead of ESP-IDF.
+
+            This configuration option saves flash footprint in the application binary.
+            Note that the version of mbedtls crypto algorithm library in ROM is v2.16.12.
+            We have done the security analysis of the mbedtls revision in ROM (v2.16.12)
+            and ensured that affected symbols have been patched (removed). If in the future
+            mbedtls revisions there are security issues that also affects the version in
+            ROM (v2.16.12) then we shall patch the relevant symbols. This would increase
+            the flash footprint and hence care must be taken to keep some reserved space
+            for the application binary in flash layout.
 
 endmenu  # mbedTLS

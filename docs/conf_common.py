@@ -4,13 +4,9 @@
 #
 # This file is imported from a language-specific conf.py (ie en/conf.py or
 # zh_CN/conf.py)
-
 # type: ignore
 # pylint: disable=wildcard-import
 # pylint: disable=undefined-variable
-
-from __future__ import print_function, unicode_literals
-
 import os.path
 import re
 
@@ -65,6 +61,8 @@ WIFI_DOCS = ['api-guides/wifi.rst',
              'api-reference/network/esp_smartconfig.rst',
              'api-reference/network/esp_wifi.rst',
              'api-reference/network/esp_dpp.rst']
+
+IEEE802154_DOCS = ['migration-guides/release-5.x/5.1/ieee802154.rst']
 
 NAN_DOCS = ['api-reference/network/esp_nan.rst']
 
@@ -179,6 +177,7 @@ conditional_include_dict = {'SOC_BT_SUPPORTED':BT_DOCS,
                             'SOC_BLUFI_SUPPORTED':BLUFI_DOCS,
                             'SOC_WIFI_SUPPORTED':WIFI_DOCS,
                             'SOC_BT_CLASSIC_SUPPORTED':CLASSIC_BT_DOCS,
+                            'SOC_IEEE802154_SUPPORTED':IEEE802154_DOCS,
                             'SOC_SUPPORT_COEXISTENCE':COEXISTENCE_DOCS,
                             'SOC_SDMMC_HOST_SUPPORTED':SDMMC_DOCS,
                             'SOC_SDIO_SLAVE_SUPPORTED':SDIO_SLAVE_DOCS,
@@ -196,6 +195,7 @@ conditional_include_dict = {'SOC_BT_SUPPORTED':BT_DOCS,
                             'SOC_ULP_FSM_SUPPORTED':ULP_FSM_DOCS,
                             'SOC_RISCV_COPROC_SUPPORTED':RISCV_COPROC_DOCS,
                             'SOC_DIG_SIGN_SUPPORTED':['api-reference/peripherals/ds.rst'],
+                            'SOC_ECDSA_SUPPORTED':['api-reference/peripherals/ecdsa.rst'],
                             'SOC_HMAC_SUPPORTED':['api-reference/peripherals/hmac.rst'],
                             'SOC_ASYNC_MEMCPY_SUPPORTED':['api-reference/system/async_memcpy.rst'],
                             'CONFIG_IDF_TARGET_ARCH_XTENSA':XTENSA_DOCS,
@@ -235,12 +235,15 @@ extensions += ['sphinx_copybutton',
 # Use wavedrompy as backend, insted of wavedrom-cli
 render_using_wavedrompy = True
 
+smartquotes = False
+
 # link roles config
 github_repo = 'espressif/esp-idf'
 
 # context used by sphinx_idf_theme
 html_context['github_user'] = 'espressif'
 html_context['github_repo'] = 'esp-idf'
+
 
 # Extra options required by sphinx_idf_theme
 project_slug = 'esp-idf'
@@ -295,6 +298,8 @@ def conf_setup(app, config):
     except FileNotFoundError:
         # Not for all target
         pass
+
+    config.html_baseurl = f'https://docs.espressif.com/projects/esp-idf/{config.language}/stable/{config.idf_target}'
 
 
 user_setup_callback = conf_setup

@@ -156,10 +156,12 @@ static esp_err_t emac_esp32_set_link(esp_eth_mac_t *mac, eth_link_t link)
     case ETH_LINK_UP:
         ESP_GOTO_ON_ERROR(esp_intr_enable(emac->intr_hdl), err, TAG, "enable interrupt failed");
         emac_esp32_start(mac);
+        ESP_LOGD(TAG, "emac started");
         break;
     case ETH_LINK_DOWN:
         ESP_GOTO_ON_ERROR(esp_intr_disable(emac->intr_hdl), err, TAG, "disable interrupt failed");
         emac_esp32_stop(mac);
+        ESP_LOGD(TAG, "emac stopped");
         break;
     default:
         ESP_GOTO_ON_FALSE(false, ESP_ERR_INVALID_ARG, err, TAG, "unknown link status");
@@ -628,7 +630,6 @@ esp_eth_mac_t *esp_eth_mac_new_esp32(const eth_esp32_emac_config_t *esp32_config
     emac->smi_mdio_gpio_num = esp32_config->smi_mdio_gpio_num;
     emac->flow_control_high_water_mark = FLOW_CONTROL_HIGH_WATER_MARK;
     emac->flow_control_low_water_mark = FLOW_CONTROL_LOW_WATER_MARK;
-    emac->use_apll = false;
     emac->parent.set_mediator = emac_esp32_set_mediator;
     emac->parent.init = emac_esp32_init;
     emac->parent.deinit = emac_esp32_deinit;

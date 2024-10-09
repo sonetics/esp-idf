@@ -438,6 +438,8 @@ typedef tBTM_RSSI_RESULTS tBTA_RSSI_RESULTS;
 typedef tBTM_SET_AFH_CHANNELS_RESULTS tBTA_SET_AFH_CHANNELS_RESULTS;
 typedef tBTM_BLE_SET_CHANNELS_RESULTS tBTA_BLE_SET_CHANNELS_RESULTS;
 
+typedef tBTM_SET_ACL_PKT_TYPES_RESULTS tBTA_SET_ACL_PKT_TYPES_RESULTS;
+
 typedef tBTM_REMOTE_DEV_NAME tBTA_REMOTE_DEV_NAME;
 
 /* advertising channel map */
@@ -1238,6 +1240,8 @@ typedef void (tBTA_START_STOP_SCAN_CMPL_CBACK) (tBTA_STATUS status);
 
 typedef void (tBTA_START_STOP_ADV_CMPL_CBACK) (tBTA_STATUS status);
 
+typedef void (tBTA_CLEAR_ADV_CMPL_CBACK) (tBTA_STATUS status);
+
 typedef void (tBTA_BLE_TRACK_ADV_CMPL_CBACK)(int action, tBTA_STATUS status,
         tBTA_DM_BLE_PF_AVBL_SPACE avbl_space,
         tBTA_DM_BLE_REF_VALUE ref_value);
@@ -1530,6 +1534,10 @@ typedef struct {
 
 typedef struct {
     UINT8 filter_policy;
+    #if (CONFIG_BT_BLE_FEAT_CREATE_SYNC_ENH)
+    UINT8 reports_disabled;
+    UINT8 filter_duplicates;
+    #endif
     UINT8 sid;
     tBLE_ADDR_TYPE addr_type;
     BD_ADDR addr;
@@ -1759,6 +1767,18 @@ void BTA_DmSetAfhChannels(const uint8_t *channels, tBTA_CMPL_CB  *set_afh_cb);
 *******************************************************************************/
 void BTA_DmSetQos(BD_ADDR bd_addr, UINT32 t_poll, tBTM_CMPL_CB *p_cb);
 #endif /// (BTA_DM_QOS_INCLUDED == TRUE)
+
+/*******************************************************************************
+**
+** Function         BTA_DmSetAclPktTypes
+**
+** Description      This function sets the packet types used for ACL traffic.
+**
+**
+** Returns          void
+**
+*******************************************************************************/
+void BTA_DmSetAclPktTypes(BD_ADDR remote_addr, UINT16 pkt_types, tBTM_CMPL_CB *p_cb);
 
 #if (BLE_INCLUDED == TRUE)
 /*******************************************************************************
@@ -2611,6 +2631,19 @@ extern void BTA_DmBleSetAdvConfigRaw (UINT8 *p_raw_adv, UINT32 raw_adv_len,
 *******************************************************************************/
 void BTA_DmBleSetLongAdv (UINT8 *adv_data, UINT32 adv_data_len,
                             tBTA_SET_ADV_DATA_CMPL_CBACK *p_adv_data_cback);
+
+/*******************************************************************************
+**
+** Function         BTA_DmBleClearAdv
+**
+** Description      This function is called to clear Advertising
+**
+** Parameters       p_adv_data_cback : clear adv complete callback.
+**
+** Returns          None
+**
+*******************************************************************************/
+void BTA_DmBleClearAdv (tBTA_CLEAR_ADV_CMPL_CBACK *p_clear_adv_cback);
 
 /*******************************************************************************
 **
