@@ -130,6 +130,25 @@ static inline void i2c_ll_set_bus_timing(i2c_dev_t *hw, i2c_hal_clk_config_t *bu
     hw->timeout.tout = bus_cfg->tout;
 }
 
+static inline void i2c_ll_get_bus_timing(i2c_dev_t *hw, i2c_hal_clk_config_t *bus_cfg)
+{
+    bus_cfg->scl_low = hw->scl_low_period.period + 1;
+    if (hw->scl_filter_cfg.en) {
+        if (hw->scl_filter_cfg.thres <= 2) {
+            bus_cfg->scl_high = hw->scl_high_period.period + 8;
+        } else {
+            bus_cfg->scl_high = hw->scl_high_period.period + hw->scl_filter_cfg.thres + 6;
+        }
+    } else {
+        bus_cfg->scl_high = hw->scl_high_period.period + 7;
+    }
+    bus_cfg->sda_hold = hw->sda_hold.time;
+    bus_cfg->sda_sample = hw->sda_sample.time;
+    bus_cfg->setup = hw->scl_rstart_setup.time;
+    bus_cfg->hold = hw->scl_start_hold.time;
+    bus_cfg->tout = hw->timeout.tout;
+}
+
 /**
  * @brief  Reset I2C txFIFO
  *

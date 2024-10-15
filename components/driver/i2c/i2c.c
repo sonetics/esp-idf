@@ -673,10 +673,12 @@ static esp_err_t i2c_hw_fsm_reset(i2c_port_t i2c_num)
 // A workaround for avoiding cause timeout issue when using
 // hardware reset.
 #if !SOC_I2C_SUPPORT_HW_FSM_RST
-    i2c_hal_timing_config_t timing_config;
+    // i2c_hal_timing_config_t timing_config;
+    i2c_hal_clk_config_t clk_config;
     uint8_t filter_cfg;
 
-    i2c_hal_get_timing_config(&i2c_context[i2c_num].hal, &timing_config);
+    // i2c_hal_get_timing_config(&i2c_context[i2c_num].hal, &timing_config);
+    i2c_ll_get_bus_timing(i2c_context[i2c_num].hal.dev, &clk_config);
     i2c_ll_get_filter(i2c_context[i2c_num].hal.dev, &filter_cfg);
 
     //to reset the I2C hw module, we need re-enable the hw
@@ -687,7 +689,8 @@ static esp_err_t i2c_hw_fsm_reset(i2c_port_t i2c_num)
     i2c_hal_master_init(&(i2c_context[i2c_num].hal));
     i2c_ll_disable_intr_mask(i2c_context[i2c_num].hal.dev, I2C_LL_INTR_MASK);
     i2c_ll_clear_intr_mask(i2c_context[i2c_num].hal.dev, I2C_LL_INTR_MASK);
-    i2c_hal_set_timing_config(&i2c_context[i2c_num].hal, &timing_config);
+    // i2c_hal_set_timing_config(&i2c_context[i2c_num].hal, &timing_config);
+    i2c_ll_set_bus_timing(i2c_context[i2c_num].hal.dev, &clk_config);
     i2c_ll_set_filter(i2c_context[i2c_num].hal.dev, filter_cfg);
 #else
     i2c_ll_master_fsm_rst(i2c_context[i2c_num].hal.dev);
