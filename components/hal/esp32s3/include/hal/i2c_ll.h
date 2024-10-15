@@ -150,6 +150,19 @@ static inline void i2c_ll_set_bus_timing(i2c_dev_t *hw, i2c_hal_clk_config_t *bu
     hw->to.time_out_en = 1;
 }
 
+static inline void i2c_ll_get_bus_timing(i2c_dev_t *hw, i2c_hal_clk_config_t *bus_cfg)
+{
+    bus_cfg->clkm_div = hw->clk_conf.sclk_div_num + 1;
+    bus_cfg->scl_low = hw->scl_low_period.scl_low_period + 1;
+    bus_cfg->scl_high = hw->scl_high_period.scl_high_period;
+    bus_cfg->scl_wait_high = hw->scl_high_period.scl_wait_high_period;
+    bus_cfg->sda_hold = hw->sda_hold.sda_hold_time + 1;
+    bus_cfg->sda_sample = hw->sda_sample.sda_sample_time + 1;
+    bus_cfg->setup = hw->scl_rstart_setup.scl_rstart_setup_time + 1;
+    bus_cfg->hold = hw->scl_start_hold.scl_start_hold_time + 1;
+    bus_cfg->tout = hw->to.time_out_value;
+}
+
 /**
  * @brief  Reset I2C txFIFO
  *
