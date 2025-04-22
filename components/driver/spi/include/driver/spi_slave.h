@@ -28,7 +28,7 @@ extern "C"
 /** @cond */
 typedef struct spi_slave_transaction_t spi_slave_transaction_t;
 /** @endcond */
-typedef void(*slave_transaction_cb_t)(spi_slave_transaction_t *trans);
+typedef bool(*slave_transaction_cb_t)(spi_slave_transaction_t *trans);
 
 /**
  * @brief This is a configuration for a SPI host acting as a slave device.

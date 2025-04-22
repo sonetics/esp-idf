@@ -470,7 +470,10 @@ static void SPI_SLAVE_ISR_ATTR spi_intr(void *arg)
         }
 #endif  //#if CONFIG_IDF_TARGET_ESP32
 
-        if (host->cfg.post_trans_cb) host->cfg.post_trans_cb(host->cur_trans);
+        if (host->cfg.post_trans_cb)
+        {
+            do_yield |= host->cfg.post_trans_cb(host->cur_trans);
+        }
 
         if(!(host->cfg.flags & SPI_SLAVE_NO_RETURN_RESULT)) {
             xQueueSendFromISR(host->ret_queue, &host->cur_trans, &do_yield);
